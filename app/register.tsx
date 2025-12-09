@@ -92,13 +92,13 @@ export default function RegisterScreen() {
             >
               <Film size={28} color="#FFFFFF" />
             </LinearGradient>
-            <Text style={styles.logoText}>CineBook</Text>
-            <Text style={styles.tagline}>Join the Community</Text>
+            <Text style={styles.logoText}>LiDoRa</Text>
+            
           </View>
 
           {/* Welcome Section */}
           <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Create Account 🎬</Text>
+            <Text style={styles.welcomeTitle}>Create Account</Text>
             <Text style={styles.welcomeSubtitle}>
               Start your cinematic journey with us
             </Text>
@@ -114,7 +114,7 @@ export default function RegisterScreen() {
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="John Doe"
+                placeholder="John Lidora"
                 placeholderTextColor="#a78bfa"
                 value={name}
                 onChangeText={setName}
@@ -126,12 +126,12 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <Mail size={18} color="#4facfe" />
-                <Text style={styles.labelText}>Email Address</Text>
+                <Text style={styles.labelText}>Your Phone</Text>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="you@example.com"
                 placeholderTextColor="#a78bfa"
+                placeholder="••••••••"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -149,8 +149,8 @@ export default function RegisterScreen() {
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
-                  placeholder="••••••••"
                   placeholderTextColor="#a78bfa"
+                  placeholder="••••••••"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
