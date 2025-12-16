@@ -1,6 +1,11 @@
-// app/_layout.tsx - Dùng phiên bản SIÊU ĐƠN GIẢN
-import { Slot } from 'expo-router';
+import { Tabs } from "expo-router";
 
 export default function RootLayout() {
-  return <Slot />;
+  return (
+    <Tabs screenOptions={{ headerShown: false }}>
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="login" />
+      <Tabs.Screen name="register" />
+    </Tabs>
+  );
 }

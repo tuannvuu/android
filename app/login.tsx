@@ -1,7 +1,7 @@
-// app/login.tsx - GIAO DIỆN ĐẸP
+import { auth } from "@/app/config/firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
-// Đã thay thế Mail bằng Smartphone để phù hợp với nhãn "Your Phone"
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { Eye, EyeOff, Film, Lock, Smartphone } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -27,19 +27,27 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Lỗi", "Vui lòng nhập số điện thoại và mật khẩu");
+      Alert.alert("Error", "Please enter phone number and password");
       return;
     }
 
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    // Giả lập quá trình đăng nhập
-    setTimeout(() => {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      console.log("Login success:", userCredential.user.uid);
+
+      router.replace("/"); // vào trang chính
+    } catch (error: any) {
+      Alert.alert("Login failed", error.message);
+    } finally {
       setLoading(false);
-      Alert.alert("Thành công", "Đăng nhập thành công!");
-      // ✨ Đã sửa: Điều hướng đến Trang chủ (tabs)
-      router.replace("/(tabs)");
-    }, 1500);
+    }
   };
 
   return (

@@ -1,8 +1,18 @@
-// app/register.tsx - GIAO DIỆN ĐẸP
-import { LinearGradient } from 'expo-linear-gradient';
-import { Link, router } from 'expo-router';
-import { Check, Eye, EyeOff, Film, Lock, Mail, User } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { auth } from "@/app/config/firebase";
+import { LinearGradient } from "expo-linear-gradient";
+import { Link, router } from "expo-router";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  Film,
+  Lock,
+  Mail,
+  User,
+} from "lucide-react-native";
+import React, { useState } from "react";
+
 import {
   Alert,
   Dimensions,
@@ -14,15 +24,15 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 export default function RegisterScreen() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,36 +40,41 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
+      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin");
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Lỗi', 'Mật khẩu không khớp');
+      Alert.alert("Lỗi", "Mật khẩu không khớp");
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
+      Alert.alert("Lỗi", "Mật khẩu phải có ít nhất 6 ký tự");
       return;
     }
 
     if (!termsAccepted) {
-      Alert.alert('Lỗi', 'Vui lòng đồng ý với điều khoản');
+      Alert.alert("Lỗi", "Vui lòng đồng ý với điều khoản");
       return;
     }
 
-    setLoading(true);
-    
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Thành công', 'Đăng ký thành công! Vui lòng đăng nhập', [
+    try {
+      setLoading(true);
+
+      await createUserWithEmailAndPassword(auth, email, password);
+
+      Alert.alert("Thành công", "Đăng ký thành công! Vui lòng đăng nhập", [
         {
-          text: 'OK',
+          text: "OK",
           onPress: () => router.back(),
         },
       ]);
-    }, 1500);
+    } catch (error: any) {
+      Alert.alert("Đăng ký thất bại", error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isFormValid = () => {
@@ -68,7 +83,7 @@ export default function RegisterScreen() {
 
   return (
     <LinearGradient
-      colors={['#4facfe', '#00f2fe', '#667eea']}
+      colors={["#4facfe", "#00f2fe", "#667eea"]}
       style={styles.container}
     >
       {/* Decorative elements */}
@@ -77,23 +92,22 @@ export default function RegisterScreen() {
       <View style={styles.circle3} />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
           <View style={styles.header}>
             <LinearGradient
-              colors={['#4facfe', '#00f2fe']}
+              colors={["#4facfe", "#00f2fe"]}
               style={styles.logoContainer}
             >
               <Film size={28} color="#FFFFFF" />
             </LinearGradient>
             <Text style={styles.logoText}>LiDoRa</Text>
-            
           </View>
 
           {/* Welcome Section */}
@@ -216,8 +230,8 @@ export default function RegisterScreen() {
                 {termsAccepted && <Check size={14} color="#FFFFFF" />}
               </View>
               <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text style={styles.termsLink}>Terms & Conditions</Text> and{' '}
+                I agree to the{" "}
+                <Text style={styles.termsLink}>Terms & Conditions</Text> and{" "}
                 <Text style={styles.termsLink}>Privacy Policy</Text>
               </Text>
             </TouchableOpacity>
@@ -233,13 +247,15 @@ export default function RegisterScreen() {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={isFormValid() ? ['#4facfe', '#00f2fe'] : ['#ccc', '#999']}
+                colors={
+                  isFormValid() ? ["#4facfe", "#00f2fe"] : ["#ccc", "#999"]
+                }
                 style={styles.gradientButton}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
                 <Text style={styles.registerButtonText}>
-                  {loading ? 'Creating Account...' : 'Create Account'}
+                  {loading ? "Creating Account..." : "Create Account"}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -256,7 +272,7 @@ export default function RegisterScreen() {
               <Link href="/login" asChild>
                 <TouchableOpacity style={styles.signinButton}>
                   <LinearGradient
-                    colors={['transparent', 'transparent']}
+                    colors={["transparent", "transparent"]}
                     style={styles.signinGradient}
                   >
                     <Text style={styles.signinButtonText}>Sign In Now</Text>
@@ -285,35 +301,35 @@ const styles = StyleSheet.create({
   },
   // Decorative Circles
   circle1: {
-    position: 'absolute',
+    position: "absolute",
     width: width * 0.6,
     height: width * 0.6,
     borderRadius: width * 0.3,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     top: -width * 0.15,
     right: -width * 0.1,
   },
   circle2: {
-    position: 'absolute',
+    position: "absolute",
     width: width * 0.5,
     height: width * 0.5,
     borderRadius: width * 0.25,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     top: width * 0.5,
     left: -width * 0.1,
   },
   circle3: {
-    position: 'absolute',
+    position: "absolute",
     width: width * 0.7,
     height: width * 0.7,
     borderRadius: width * 0.35,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     bottom: -width * 0.2,
     right: -width * 0.1,
   },
   // Header
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingTop: 50,
     paddingBottom: 20,
   },
@@ -321,10 +337,10 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -332,116 +348,116 @@ const styles = StyleSheet.create({
   },
   logoText: {
     fontSize: 32,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontWeight: "800",
+    color: "#FFFFFF",
     letterSpacing: 1,
   },
   tagline: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: "rgba(255, 255, 255, 0.8)",
     marginTop: 4,
     letterSpacing: 2,
   },
   // Welcome Section
   welcomeSection: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 32,
     marginTop: 10,
   },
   welcomeTitle: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: "700",
+    color: "#FFFFFF",
     marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   welcomeSubtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
+    color: "rgba(255, 255, 255, 0.9)",
+    textAlign: "center",
   },
   // Form Card
   formCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     borderRadius: 30,
     padding: 28,
     marginBottom: 24,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   // Input Groups
   inputGroup: {
     marginBottom: 20,
   },
   inputLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 10,
   },
   labelText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#4facfe',
+    fontWeight: "600",
+    color: "#4facfe",
     marginLeft: 8,
   },
   input: {
     height: 58,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderWidth: 2,
-    borderColor: 'rgba(79, 172, 254, 0.2)',
+    borderColor: "rgba(79, 172, 254, 0.2)",
     borderRadius: 16,
     paddingHorizontal: 20,
     fontSize: 16,
-    color: '#333',
-    shadowColor: '#4facfe',
+    color: "#333",
+    shadowColor: "#4facfe",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   passwordContainer: {
-    position: 'relative',
+    position: "relative",
   },
   passwordInput: {
     height: 58,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderWidth: 2,
-    borderColor: 'rgba(79, 172, 254, 0.2)',
+    borderColor: "rgba(79, 172, 254, 0.2)",
     borderRadius: 16,
     paddingHorizontal: 20,
     paddingRight: 60,
     fontSize: 16,
-    color: '#333',
-    shadowColor: '#4facfe',
+    color: "#333",
+    shadowColor: "#4facfe",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   eyeButton: {
-    position: 'absolute',
+    position: "absolute",
     right: 20,
-    top: '50%',
+    top: "50%",
     transform: [{ translateY: -10 }],
     padding: 8,
   },
   errorText: {
     fontSize: 12,
-    color: '#ff6b6b',
+    color: "#ff6b6b",
     marginTop: 6,
     marginLeft: 4,
   },
   // Terms and Conditions
   termsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 28,
     marginTop: 10,
   },
@@ -450,31 +466,31 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#4facfe',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#4facfe",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
     marginTop: 2,
   },
   checked: {
-    backgroundColor: '#4facfe',
+    backgroundColor: "#4facfe",
   },
   termsText: {
     flex: 1,
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     lineHeight: 20,
   },
   termsLink: {
-    color: '#4facfe',
-    fontWeight: '600',
+    color: "#4facfe",
+    fontWeight: "600",
   },
   // Register Button
   registerButton: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 24,
-    shadowColor: '#4facfe',
+    shadowColor: "#4facfe",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -485,51 +501,51 @@ const styles = StyleSheet.create({
   },
   gradientButton: {
     height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   registerButtonText: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: "700",
+    color: "#FFFFFF",
     letterSpacing: 0.5,
   },
   // Divider
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(79, 172, 254, 0.2)',
+    backgroundColor: "rgba(79, 172, 254, 0.2)",
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 14,
-    color: '#4facfe',
-    fontWeight: '500',
+    color: "#4facfe",
+    fontWeight: "500",
   },
   // Sign In
   signinContainer: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   signinButton: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 2,
-    borderColor: '#4facfe',
-    width: '100%',
+    borderColor: "#4facfe",
+    width: "100%",
   },
   signinGradient: {
     paddingVertical: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   signinButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#4facfe',
+    fontWeight: "600",
+    color: "#4facfe",
   },
 });

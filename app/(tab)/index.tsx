@@ -318,7 +318,7 @@ export default function PremiumHomeScreen() {
       <LinearGradient colors={["#000428", "#004e92"]} style={styles.header}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.headerTitle}>LiDoRa CINEMAS</Text>
+            <Text style={styles.headerTitle}>LiDoRa</Text>
             <Text style={styles.headerSubtitle}>PREMIUM EXPERIENCE</Text>
           </View>
           <View style={styles.headerIcons}>
