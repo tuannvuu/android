@@ -1,7 +1,8 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Link } from "expo-router";
+import { Link, router, useRouter } from "expo-router";
 import { onValue, ref } from "firebase/database";
+
 import React, { useEffect, useState } from "react";
 import {
   Dimensions,
@@ -16,25 +17,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../config/firebase";
+import { db } from "../../config/firebase";
 
 const { width } = Dimensions.get("window");
 
 // INTERFACE FOR TYPES
-interface Movie {
-  id: string;
-  title: string;
-  genre: string[];
-  rating: number;
-  duration: string;
-  year: number;
-  poster: string;
-  backdrop: string;
-  description: string;
-  isIMAX?: boolean;
-  is4D?: boolean;
-  isVIP?: boolean;
-}
 
 interface Cinema {
   id: string;
@@ -53,53 +40,6 @@ interface UpcomingMovie {
 }
 
 // MOCK DATA - PREMIUM MOVIES
-const nowPlayingMovies: Movie[] = [
-  {
-    id: "4",
-    title: "CẢM XÚC KỲ DIỆU 2",
-    genre: ["Hoạt hình", "Gia đình", "Hài"],
-    rating: 4.9,
-    duration: "1h 56m",
-    year: 2024,
-    poster:
-      "https://images.unsplash.com/photo-1574267432553-4b4628081c31?w=400&h=600&fit=crop",
-    backdrop: "",
-    description: "",
-    isIMAX: false,
-    is4D: true,
-    isVIP: true,
-  },
-  {
-    id: "5",
-    title: "DEADPOOL & WOLVERINE",
-    genre: ["Hành động", "Hài", "Siêu anh hùng"],
-    rating: 4.8,
-    duration: "2h 18m",
-    year: 2024,
-    poster:
-      "https://images.unsplash.com/photo-1635805737707-575885ab0820?w=400&h=600&fit=crop",
-    backdrop: "",
-    description: "",
-    isIMAX: true,
-    is4D: true,
-    isVIP: true,
-  },
-  {
-    id: "6",
-    title: "THỢ SĂN MA: VƯƠNG QUỐC BĂNG GIÁ",
-    genre: ["Hài", "Kỳ ảo", "Phiêu lưu"],
-    rating: 4.2,
-    duration: "1h 55m",
-    year: 2024,
-    poster:
-      "https://images.unsplash.com/photo-1489599809516-9827b6d1cf13?w=400&h=600&fit=crop",
-    backdrop: "",
-    description: "",
-    isIMAX: false,
-    is4D: false,
-    isVIP: false,
-  },
-];
 
 const cinemas: Cinema[] = [
   {
@@ -130,7 +70,7 @@ const MovieCard = ({
   movie,
   size = "medium",
 }: {
-  movie: any; // Đổi từ Movie sang any để linh hoạt với dữ liệu Firebase
+  movie: any;
   size?: "small" | "medium" | "large";
 }) => {
   const cardWidth =
@@ -140,10 +80,18 @@ const MovieCard = ({
       ? width * 0.6
       : width * 0.4;
 
+  // Định nghĩa hàm xử lý khi nhấn
+  const handlePress = () => {
+    router.push({
+      pathname: "/movie-details",
+      params: { id: movie.id }, // Đảm bảo movie có thuộc tính id
+    });
+  };
   return (
     <TouchableOpacity
       style={[styles.movieCard, { width: cardWidth }]}
       activeOpacity={0.9}
+      onPress={handlePress}
     >
       {/* Sửa uri để tránh bị trắng ảnh nếu link lỗi */}
       <Image
@@ -204,30 +152,51 @@ const MovieCard = ({
   );
 };
 
-const CinemaCard = ({ cinema }: { cinema: Cinema }) => (
-  <TouchableOpacity style={styles.cinemaCard} activeOpacity={0.9}>
-    <View style={styles.cinemaHeader}>
-      <View>
-        <Text style={styles.cinemaName}>{cinema.name}</Text>
-        <Text style={styles.cinemaLocation}>{cinema.location}</Text>
-      </View>
-      <View style={styles.distanceBadge}>
-        <Ionicons name="location" size={12} color="#FFF" />
-        <Text style={styles.distanceText}>{cinema.distance}</Text>
-      </View>
-    </View>
-    <View style={styles.featuresContainer}>
-      {cinema.features.map((feature, index) => (
-        <View key={index} style={styles.featureTag}>
-          <Text style={styles.featureText}>{feature}</Text>
+const CinemaCard = ({ cinema }: { cinema: Cinema }) => {
+  const router = useRouter(); // Khai báo router bên trong component
+
+  return (
+    <TouchableOpacity
+      style={styles.cinemaCard}
+      activeOpacity={0.8}
+      // Khi nhấn vào toàn bộ thẻ rạp
+      onPress={() => {
+        console.log("Đang chuyển tới rạp:", cinema.name);
+        router.push({
+          pathname: "/cinema-movies" as any,
+          params: {
+            cinemaId: cinema.id,
+            cinemaName: cinema.name,
+          },
+        });
+      }}
+    >
+      <View style={styles.cinemaHeader}>
+        <View>
+          <Text style={styles.cinemaName}>{cinema.name}</Text>
+          <Text style={styles.cinemaLocation}>{cinema.location}</Text>
         </View>
-      ))}
-    </View>
-    <TouchableOpacity style={styles.selectButton}>
-      <Text style={styles.selectButtonText}>CHỌN</Text>
+        <View style={styles.distanceBadge}>
+          <Ionicons name="location" size={12} color="#FFF" />
+          <Text style={styles.distanceText}>{cinema.distance}</Text>
+        </View>
+      </View>
+
+      <View style={styles.featuresContainer}>
+        {cinema.features.map((feature, index) => (
+          <View key={index} style={styles.featureTag}>
+            <Text style={styles.featureText}>{feature}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Phần nút hiển thị (đã nằm trong TouchableOpacity cha nên sẽ nhận sự kiện onPress) */}
+      <View style={styles.selectButton}>
+        <Text style={styles.selectButtonText}>XEM PHIM TẠI RẠP NÀY</Text>
+      </View>
     </TouchableOpacity>
-  </TouchableOpacity>
-);
+  );
+};
 
 const UpcomingMovieCard = ({ movie }: { movie: UpcomingMovie }) => (
   <TouchableOpacity style={styles.upcomingCard}>
@@ -250,6 +219,7 @@ const UpcomingMovieCard = ({ movie }: { movie: UpcomingMovie }) => (
 
 export default function PremiumHomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
+
   const [activeTab, setActiveTab] = useState("nowplaying");
   const [moviesFromDb, setMoviesFromDb] = useState<any[]>([]);
 
@@ -258,18 +228,41 @@ export default function PremiumHomeScreen() {
 
     const unsubscribe = onValue(moviesRef, (snapshot) => {
       const data = snapshot.val();
+
       if (data) {
-        // Chuyển object từ Firebase thành mảng
-        const list = Object.values(data);
-        setMoviesFromDb(list);
+        const movieList = Object.keys(data).map((key) => ({
+          ...data[key],
+          id: key,
+        }));
+        setMoviesFromDb(movieList);
       }
     });
 
     return () => unsubscribe();
   }, []);
 
+  // 1. Lọc tất cả phim theo từ khóa search trước
+  const filteredMovies = moviesFromDb.filter((movie) =>
+    movie.title?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // 2. Lọc phim Hot từ danh sách ĐÃ SEARCH (Featured)
+  const hotMovies = filteredMovies.filter((movie) => movie.isHot === true);
+
+  // 3. Lọc phim Đang chiếu từ danh sách ĐÃ SEARCH
+  const nowPlayingMovies = filteredMovies.filter((movie) => {
+    // Chuyển status về chữ thường trước khi so sánh để tránh lỗi viết hoa/thường
+    const status = movie.status?.toLowerCase();
+    return status === "nowplaying" || status === "đang chiếu";
+  });
+
+  // 4. Lọc phim Sắp chiếu từ danh sách ĐÃ SEARCH
+  const upcomingMovies = filteredMovies.filter(
+    (movie) => movie.status === "upcoming" || movie.year === 2024
+  );
+
   // Lọc ra phim Hot để đưa lên đầu (Featured)
-  const hotMovies = moviesFromDb.filter((movie) => movie.isHot === true);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -329,7 +322,7 @@ export default function PremiumHomeScreen() {
           <FlatList
             horizontal
             // SỬA DÒNG NÀY: Dùng hotMovies thay vì featuredMovies
-            data={hotMovies.length > 0 ? hotMovies : moviesFromDb}
+            data={hotMovies.length > 0 ? hotMovies : filteredMovies}
             renderItem={({ item }) => <MovieCard movie={item} size="large" />}
             keyExtractor={(item) => item.id.toString()}
             showsHorizontalScrollIndicator={false}
@@ -429,13 +422,14 @@ export default function PremiumHomeScreen() {
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {moviesFromDb
-              .filter(
-                (movie) => movie.status === "upcoming" || movie.year === 2024
-              ) // Lọc phim sắp chiếu
-              .map((movie) => (
-                <UpcomingMovieCard key={movie.id} movie={movie} />
-              ))}
+            {upcomingMovies.map(
+              (
+                movie,
+                index // Sử dụng biến đã lọc ở Bước 1
+              ) => (
+                <UpcomingMovieCard key={movie.id || index} movie={movie} />
+              )
+            )}
           </ScrollView>
         </View>
 

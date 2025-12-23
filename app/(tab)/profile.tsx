@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { get, ref } from "firebase/database";
 import React, { useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { db } from "../config/firebase"; // Đảm bảo đường dẫn đúng
+import { db } from "../../config/firebase"; // Đảm bảo đường dẫn đúng
 
 export default function ProfileScreen() {
   const [userData, setUserData] = useState<any>(null);

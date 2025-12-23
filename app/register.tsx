@@ -1,4 +1,3 @@
-import { db } from "@/app/config/firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
 import { get, ref, set } from "firebase/database";
@@ -12,6 +11,7 @@ import {
   User,
 } from "lucide-react-native";
 import React, { useState } from "react";
+import { db } from "../config/firebase";
 
 import {
   Alert,

@@ -1,6 +1,6 @@
-import { initializeApp } from "firebase/app";
+import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getDatabase } from "firebase/database"; // Dùng cho Realtime Database
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDICFea2S38RMJmqZiKsTIXlg4xTkNEewM",
@@ -14,7 +14,15 @@ const firebaseConfig = {
   databaseURL: "https://lidora-b6d61-default-rtdb.asia-southeast1.firebasedatabase.app" 
 };
 
-const app = initializeApp(firebaseConfig);
+// Init app (chống Expo reload)
+const app =
+  getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-export const auth = getAuth(app);
-export const db = getDatabase(app); // Biến db này giờ dùng cho Realtime Database
+// ✅ Auth (Expo OK, KHÔNG CRASH)
+const auth = getAuth(app);
+
+// Database
+const db = getDatabase(app);
+
+export { app, auth, db };
+
