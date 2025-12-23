@@ -1,7 +1,7 @@
-import { auth } from "@/app/config/firebase";
+import { db } from "@/app/config/firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { get, ref } from "firebase/database";
 import { Eye, EyeOff, Film, Lock, Smartphone } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -16,35 +16,45 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
 const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter phone number and password");
+    if (!phone || !password) {
+      Alert.alert("Lỗi", "Vui lòng nhập số điện thoại và mật khẩu");
       return;
     }
 
     try {
       setLoading(true);
 
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      // Sử dụng 'ref' và 'db' đúng cách
+      const userRef = ref(db, "users/" + phone.trim());
 
-      console.log("Login success:", userCredential.user.uid);
+      // Sử dụng 'get' để lấy dữ liệu
+      const snapshot = await get(userRef);
 
-      router.replace("/"); // vào trang chính
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+
+        // So khớp mật khẩu thuần túy theo ý bạn
+        if (userData.password === password) {
+          router.replace("/(tab)");
+        } else {
+          Alert.alert("Lỗi", "Mật khẩu không chính xác");
+        }
+      } else {
+        Alert.alert("Lỗi", "Số điện thoại chưa được đăng ký");
+      }
     } catch (error: any) {
-      Alert.alert("Login failed", error.message);
+      // Sử dụng biến 'error' ở đây để hết lỗi ESLint
+      console.error("Login Error:", error.message);
+      Alert.alert("Lỗi", "Đã xảy ra lỗi hệ thống. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -55,52 +65,34 @@ export default function LoginScreen() {
       colors={["#667eea", "#764ba2", "#f093fb"]}
       style={styles.container}
     >
-      {/* Decorative elements */}
-      <View style={styles.circle1} />
-      <View style={styles.circle2} />
-      <View style={styles.circle3} />
-
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
+        style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View style={styles.header}>
-            <LinearGradient
-              colors={["#f093fb", "#f5576c"]}
-              style={styles.logoContainer}
-            >
+            <View style={styles.logoContainer}>
               <Film size={28} color="#FFFFFF" />
-            </LinearGradient>
+            </View>
             <Text style={styles.logoText}>LiDoRa</Text>
           </View>
 
-          {/* Welcome Section */}
-          <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Welcome Back!</Text>
-            <Text style={styles.welcomeSubtitle}>
-              Sign in to continue your cinematic journey
-            </Text>
-          </View>
-
-          {/* Form Card */}
           <View style={styles.formCard}>
             {/* Phone Input */}
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <Smartphone size={18} color="#764ba2" />
-                <Text style={styles.labelText}>Your Phone</Text>
+                <Text style={styles.labelText}>Số điện thoại</Text>
               </View>
               <TextInput
                 style={styles.input}
+                placeholder="09xxxxxxxx"
                 placeholderTextColor="#a78bfa"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
+                value={phone} // Đã sửa từ email -> phone
+                onChangeText={setPhone} // Đã sửa từ setEmail -> setPhone
                 keyboardType="phone-pad"
                 editable={!loading}
               />
@@ -110,20 +102,21 @@ export default function LoginScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <Lock size={18} color="#764ba2" />
-                <Text style={styles.labelText}>Password</Text>
+                <Text style={styles.labelText}>Mật khẩu</Text>
               </View>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
+                  placeholder="••••••••"
                   placeholderTextColor="#a78bfa"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
+                  secureTextEntry={!showPassword} // Đã sửa lỗi find name 'showPassword'
                   editable={!loading}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
+                  onPress={() => setShowPassword(!showPassword)} // Đã sửa lỗi find name 'setShowPassword'
                 >
                   {showPassword ? (
                     <EyeOff size={20} color="#764ba2" />
@@ -134,74 +127,30 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {/* Forgot Password Link */}
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => router.push("/forgot-password")}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
             {/* Login Button */}
             <TouchableOpacity
-              style={[
-                styles.loginButton,
-                loading && styles.loginButtonDisabled,
-              ]}
+              style={[styles.loginButton, loading && { opacity: 0.7 }]}
               onPress={handleLogin}
               disabled={loading}
-              activeOpacity={0.8}
             >
               <LinearGradient
                 colors={["#f093fb", "#f5576c"]}
                 style={styles.gradientButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
               >
                 <Text style={styles.loginButtonText}>
-                  {loading ? "Signing In..." : "Sign In"}
+                  {loading ? "Đang đăng nhập..." : "ĐĂNG NHẬP"}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or continue with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Login */}
-            <View style={styles.socialButtons}>
-              <TouchableOpacity style={styles.socialButton}>
-                <View style={styles.socialIconContainer}>
-                  <Smartphone size={20} color="#667eea" />
-                </View>
-                <Text style={styles.socialButtonText}>Phone</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.socialButton}>
-                <LinearGradient
-                  colors={["#4285F4", "#34A853", "#FBBC05", "#EA4335"]}
-                  style={styles.googleIconContainer}
-                >
-                  <Text style={styles.googleText}>G</Text>
-                </LinearGradient>
-                <Text style={styles.socialButtonText}>Google</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Sign Up Link */}
-          <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>
-              {`Don't have an account? `}
+            <View style={styles.signupContainer}>
+              <Text style={{ color: "#FFF" }}>Chưa có tài khoản? </Text>
               <Link href="/register" asChild>
                 <TouchableOpacity>
-                  <Text style={styles.signupLink}>Sign Up</Text>
+                  <Text style={styles.signupLink}>Đăng ký ngay</Text>
                 </TouchableOpacity>
               </Link>
-            </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

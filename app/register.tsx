@@ -1,7 +1,7 @@
-import { auth } from "@/app/config/firebase";
+import { db } from "@/app/config/firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { get, ref, set } from "firebase/database";
 import {
   Check,
   Eye,
@@ -30,7 +30,7 @@ const { width } = Dimensions.get("window");
 
 export default function RegisterScreen() {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState(""); // Đổi email thành phone cho dễ hiểu
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -39,46 +39,45 @@ export default function RegisterScreen() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name || !phone || !password) {
       Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert("Lỗi", "Mật khẩu không khớp");
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert("Lỗi", "Mật khẩu phải có ít nhất 6 ký tự");
-      return;
-    }
-
-    if (!termsAccepted) {
-      Alert.alert("Lỗi", "Vui lòng đồng ý với điều khoản");
       return;
     }
 
     try {
       setLoading(true);
+      const userRef = ref(db, "users/" + phone.trim());
 
-      await createUserWithEmailAndPassword(auth, email, password);
+      // Kiểm tra xem số điện thoại đã tồn tại chưa
+      const snapshot = await get(userRef);
+      if (snapshot.exists()) {
+        Alert.alert("Lỗi", "Số điện thoại này đã được đăng ký!");
+        setLoading(false);
+        return;
+      }
 
-      Alert.alert("Thành công", "Đăng ký thành công! Vui lòng đăng nhập", [
-        {
-          text: "OK",
-          onPress: () => router.back(),
-        },
+      // Dùng hàm 'set' để lưu (đã sửa lỗi 'Cannot find name set')
+      await set(userRef, {
+        fullName: name,
+        password: password,
+        phone: phone.trim(),
+        createdAt: new Date().toISOString(),
+      });
+
+      Alert.alert("Thành công", "Đăng ký tài khoản thành công!", [
+        { text: "Đăng nhập ngay", onPress: () => router.push("/login") },
       ]);
     } catch (error: any) {
-      Alert.alert("Đăng ký thất bại", error.message);
+      // Sử dụng biến 'error' ở đây để hết lỗi ESLint
+      console.error("Lỗi đăng ký:", error.message);
+      Alert.alert("Lỗi", "Không thể đăng ký tài khoản lúc này.");
     } finally {
       setLoading(false);
     }
   };
 
   const isFormValid = () => {
-    return name && email && password && confirmPassword && termsAccepted;
+    return name && phone && password && confirmPassword && termsAccepted;
   };
 
   return (
@@ -112,9 +111,9 @@ export default function RegisterScreen() {
 
           {/* Welcome Section */}
           <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Create Account</Text>
+            <Text style={styles.welcomeTitle}>Đăng Ký Tài Khoản</Text>
             <Text style={styles.welcomeSubtitle}>
-              Start your cinematic journey with us
+              Hãy bắt đầu hành trình điện ảnh của bạn cùng chúng tôi!
             </Text>
           </View>
 
@@ -124,11 +123,11 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <User size={18} color="#4facfe" />
-                <Text style={styles.labelText}>Full Name</Text>
+                <Text style={styles.labelText}>Họ và tên</Text>
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="John Lidora"
+                placeholder="Nguyễn Tuấn Vũ"
                 placeholderTextColor="#a78bfa"
                 value={name}
                 onChangeText={setName}
@@ -140,16 +139,16 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <Mail size={18} color="#4facfe" />
-                <Text style={styles.labelText}>Your Phone</Text>
+                <Text style={styles.labelText}>Số điện thoại</Text>
               </View>
               <TextInput
                 style={styles.input}
                 placeholderTextColor="#a78bfa"
                 placeholder="••••••••"
-                value={email}
-                onChangeText={setEmail}
+                value={phone}
+                onChangeText={setPhone}
                 autoCapitalize="none"
-                keyboardType="email-address"
+                keyboardType="phone-pad"
                 editable={!loading}
               />
             </View>
@@ -158,7 +157,7 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <Lock size={18} color="#4facfe" />
-                <Text style={styles.labelText}>Password</Text>
+                <Text style={styles.labelText}>Mật khẩu</Text>
               </View>
               <View style={styles.passwordContainer}>
                 <TextInput
@@ -183,7 +182,7 @@ export default function RegisterScreen() {
               </View>
               {password.length > 0 && password.length < 6 && (
                 <Text style={styles.errorText}>
-                  Password must be at least 6 characters
+                  Mật khẩu phải có ít nhất 6 ký tự
                 </Text>
               )}
             </View>
@@ -192,7 +191,7 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.inputLabel}>
                 <Lock size={18} color="#4facfe" />
-                <Text style={styles.labelText}>Confirm Password</Text>
+                <Text style={styles.labelText}>Xác nhận mật khẩu</Text>
               </View>
               <View style={styles.passwordContainer}>
                 <TextInput
@@ -216,7 +215,7 @@ export default function RegisterScreen() {
                 </TouchableOpacity>
               </View>
               {confirmPassword.length > 0 && password !== confirmPassword && (
-                <Text style={styles.errorText}>Passwords do not match</Text>
+                <Text style={styles.errorText}>Mật khẩu không khớp</Text>
               )}
             </View>
 
@@ -230,9 +229,9 @@ export default function RegisterScreen() {
                 {termsAccepted && <Check size={14} color="#FFFFFF" />}
               </View>
               <Text style={styles.termsText}>
-                I agree to the{" "}
-                <Text style={styles.termsLink}>Terms & Conditions</Text> and{" "}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
+                Tôi đồng ý với{" "}
+                <Text style={styles.termsLink}>Điều khoản & Điều kiện</Text> và{" "}
+                <Text style={styles.termsLink}>Chính sách bảo mật</Text>
               </Text>
             </TouchableOpacity>
 
@@ -255,7 +254,7 @@ export default function RegisterScreen() {
                 end={{ x: 1, y: 0 }}
               >
                 <Text style={styles.registerButtonText}>
-                  {loading ? "Creating Account..." : "Create Account"}
+                  {loading ? "Đăng Ký..." : "Đăng Ký"}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -263,7 +262,7 @@ export default function RegisterScreen() {
             {/* Divider */}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Already have an account?</Text>
+              <Text style={styles.dividerText}>Đã có tài khoản?</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -275,7 +274,7 @@ export default function RegisterScreen() {
                     colors={["transparent", "transparent"]}
                     style={styles.signinGradient}
                   >
-                    <Text style={styles.signinButtonText}>Sign In Now</Text>
+                    <Text style={styles.signinButtonText}>Đăng nhập ngay</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </Link>

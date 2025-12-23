@@ -1,6 +1,8 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import { Link } from "expo-router";
+import { onValue, ref } from "firebase/database";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -14,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { db } from "../config/firebase";
 
 const { width } = Dimensions.get("window");
 
@@ -50,65 +53,11 @@ interface UpcomingMovie {
 }
 
 // MOCK DATA - PREMIUM MOVIES
-const featuredMovies: Movie[] = [
-  {
-    id: "1",
-    title: "DUNE: PART TWO",
-    genre: ["Sci-Fi", "Adventure", "Epic"],
-    rating: 4.8,
-    duration: "2h 46m",
-    year: 2024,
-    poster:
-      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&h=600&fit=crop",
-    backdrop:
-      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&h=400&fit=crop",
-    description:
-      "Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family.",
-    isIMAX: true,
-    is4D: true,
-    isVIP: true,
-  },
-  {
-    id: "2",
-    title: "FURIOSA",
-    genre: ["Action", "Adventure", "Thriller"],
-    rating: 4.7,
-    duration: "2h 28m",
-    year: 2024,
-    poster:
-      "https://images.unsplash.com/photo-1489599809516-9827b6d1cf13?w=400&h=600&fit=crop",
-    backdrop:
-      "https://images.unsplash.com/photo-1489599809516-9827b6d1cf13?w=800&h=400&fit=crop",
-    description:
-      "The origin story of renegade warrior Furiosa before her encounter with Mad Max.",
-    isIMAX: true,
-    is4D: false,
-    isVIP: true,
-  },
-  {
-    id: "3",
-    title: "KINGDOM OF THE PLANET OF THE APES",
-    genre: ["Sci-Fi", "Action", "Drama"],
-    rating: 4.5,
-    duration: "2h 25m",
-    year: 2024,
-    poster:
-      "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w-400&h=600&fit=crop",
-    backdrop:
-      "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&h=400&fit=crop",
-    description:
-      "Many years after Caesar's reign, apes are the dominant species living harmoniously.",
-    isIMAX: true,
-    is4D: true,
-    isVIP: false,
-  },
-];
-
 const nowPlayingMovies: Movie[] = [
   {
     id: "4",
-    title: "INSIDE OUT 2",
-    genre: ["Animation", "Family", "Comedy"],
+    title: "CẢM XÚC KỲ DIỆU 2",
+    genre: ["Hoạt hình", "Gia đình", "Hài"],
     rating: 4.9,
     duration: "1h 56m",
     year: 2024,
@@ -123,7 +72,7 @@ const nowPlayingMovies: Movie[] = [
   {
     id: "5",
     title: "DEADPOOL & WOLVERINE",
-    genre: ["Action", "Comedy", "Superhero"],
+    genre: ["Hành động", "Hài", "Siêu anh hùng"],
     rating: 4.8,
     duration: "2h 18m",
     year: 2024,
@@ -137,8 +86,8 @@ const nowPlayingMovies: Movie[] = [
   },
   {
     id: "6",
-    title: "GHOSTBUSTERS: FROZEN EMPIRE",
-    genre: ["Comedy", "Fantasy", "Adventure"],
+    title: "THỢ SĂN MA: VƯƠNG QUỐC BĂNG GIÁ",
+    genre: ["Hài", "Kỳ ảo", "Phiêu lưu"],
     rating: 4.2,
     duration: "1h 55m",
     year: 2024,
@@ -155,51 +104,24 @@ const nowPlayingMovies: Movie[] = [
 const cinemas: Cinema[] = [
   {
     id: "1",
-    name: "LiDoRa IMAX Theater",
-    location: "Downtown Central",
-    distance: "0.5 mi",
-    features: ["IMAX", "4DX", "VIP Lounge", "Dolby Atmos"],
+    name: "Rạp IMAX LiDoRa",
+    location: "Trung tâm Thành phố",
+    distance: "0.8 km",
+    features: ["IMAX", "4DX", "Phòng chờ VIP", "Dolby Atmos"],
   },
   {
     id: "2",
     name: "Galaxy Premium Cinema",
-    location: "Westgate Mall",
-    distance: "2.1 mi",
+    location: "Trung tâm mua sắm Westgate",
+    distance: "3.4 km",
     features: ["IMAX", "ScreenX", "Gold Class"],
   },
   {
     id: "3",
-    name: "Starlight Cinemas",
-    location: "Riverside Plaza",
-    distance: "3.4 mi",
-    features: ["4DX", "Kids Friendly", "Bar"],
-  },
-];
-
-const upcomingMovies: UpcomingMovie[] = [
-  {
-    id: "1",
-    title: "JOKER: FOLIE À DEUX",
-    releaseDate: "Oct 4, 2024",
-    poster:
-      "https://images.unsplash.com/photo-1489599809516-9827b6d1cf13?w=400&h=600&fit=crop",
-    tag: "MUSICAL THRILLER",
-  },
-  {
-    id: "2",
-    title: "VENOM: THE LAST DANCE",
-    releaseDate: "Oct 25, 2024",
-    poster:
-      "https://images.unsplash.com/photo-1635805737707-575885ab0820?w=400&h=600&fit=crop",
-    tag: "FINAL CHAPTER",
-  },
-  {
-    id: "3",
-    title: "MOANA 2",
-    releaseDate: "Nov 27, 2024",
-    poster:
-      "https://images.unsplash.com/photo-1574267432553-4b4628081c31?w=400&h=600&fit=crop",
-    tag: "ANIMATED SEQUEL",
+    name: "Rạp Starlight",
+    location: "Quảng trường Riverside",
+    distance: "5.5 km",
+    features: ["4DX", "Thân thiện trẻ em", "Quầy bar"],
   },
 ];
 
@@ -208,7 +130,7 @@ const MovieCard = ({
   movie,
   size = "medium",
 }: {
-  movie: Movie;
+  movie: any; // Đổi từ Movie sang any để linh hoạt với dữ liệu Firebase
   size?: "small" | "medium" | "large";
 }) => {
   const cardWidth =
@@ -223,11 +145,20 @@ const MovieCard = ({
       style={[styles.movieCard, { width: cardWidth }]}
       activeOpacity={0.9}
     >
-      <Image source={{ uri: movie.poster }} style={styles.moviePoster} />
+      {/* Sửa uri để tránh bị trắng ảnh nếu link lỗi */}
+      <Image
+        source={{
+          uri:
+            movie.poster || "https://via.placeholder.com/400x600?text=No+Image",
+        }}
+        style={styles.moviePoster}
+      />
+
       <LinearGradient
         colors={["transparent", "rgba(0,0,0,0.9)"]}
         style={styles.movieGradient}
       />
+
       <View style={styles.movieBadges}>
         {movie.isIMAX && (
           <View style={[styles.badge, { backgroundColor: "#FF6B35" }]}>
@@ -245,19 +176,28 @@ const MovieCard = ({
           </View>
         )}
       </View>
+
       <View style={styles.movieInfo}>
         <Text style={styles.movieTitle} numberOfLines={1}>
-          {movie.title}
+          {movie.title || "Chưa có tên phim"}
         </Text>
+
         <View style={styles.movieMeta}>
-          <Text style={styles.movieGenre}>{movie.genre.join(" • ")}</Text>
+          {/* SỬA LỖI .JOIN Ở ĐÂY: Kiểm tra nếu genre là mảng mới join */}
+          <Text style={styles.movieGenre}>
+            {Array.isArray(movie.genre)
+              ? movie.genre.join(" • ")
+              : "Phim chiếu rạp"}
+          </Text>
+
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={14} color="#FFD700" />
-            <Text style={styles.movieRating}>{movie.rating}</Text>
+            <Text style={styles.movieRating}>{movie.rating || "N/A"}</Text>
           </View>
         </View>
+
         <Text style={styles.movieDuration}>
-          {movie.duration} • {movie.year}
+          {movie.duration || "Đang cập nhật"} • {movie.year || "2024"}
         </Text>
       </View>
     </TouchableOpacity>
@@ -284,7 +224,7 @@ const CinemaCard = ({ cinema }: { cinema: Cinema }) => (
       ))}
     </View>
     <TouchableOpacity style={styles.selectButton}>
-      <Text style={styles.selectButtonText}>SELECT</Text>
+      <Text style={styles.selectButtonText}>CHỌN</Text>
     </TouchableOpacity>
   </TouchableOpacity>
 );
@@ -297,10 +237,12 @@ const UpcomingMovieCard = ({ movie }: { movie: UpcomingMovie }) => (
       <Text style={styles.upcomingTitle}>{movie.title}</Text>
       <View style={styles.releaseDate}>
         <MaterialIcons name="date-range" size={16} color="#667eea" />
-        <Text style={styles.releaseDateText}>Releases {movie.releaseDate}</Text>
+        <Text style={styles.releaseDateText}>
+          Khởi chiếu {movie.releaseDate}
+        </Text>
       </View>
       <TouchableOpacity style={styles.remindButton}>
-        <Text style={styles.remindButtonText}>REMIND ME</Text>
+        <Text style={styles.remindButtonText}>NHẮC TÔI</Text>
       </TouchableOpacity>
     </View>
   </TouchableOpacity>
@@ -308,26 +250,45 @@ const UpcomingMovieCard = ({ movie }: { movie: UpcomingMovie }) => (
 
 export default function PremiumHomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("nowPlaying");
+  const [activeTab, setActiveTab] = useState("nowplaying");
+  const [moviesFromDb, setMoviesFromDb] = useState<any[]>([]);
 
+  useEffect(() => {
+    const moviesRef = ref(db, "movies");
+
+    const unsubscribe = onValue(moviesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // Chuyển object từ Firebase thành mảng
+        const list = Object.values(data);
+        setMoviesFromDb(list);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Lọc ra phim Hot để đưa lên đầu (Featured)
+  const hotMovies = moviesFromDb.filter((movie) => movie.isHot === true);
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-
       {/* Premium Header */}
       <LinearGradient colors={["#000428", "#004e92"]} style={styles.header}>
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.headerTitle}>LiDoRa</Text>
-            <Text style={styles.headerSubtitle}>PREMIUM EXPERIENCE</Text>
+            <Text style={styles.headerSubtitle}>TRẢI NGHIỆM CAO CẤP</Text>
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity style={styles.iconButton}>
               <Ionicons name="notifications-outline" size={24} color="#FFF" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.profileButton}>
-              <FontAwesome5 name="user" size={20} color="#FFF" />
-            </TouchableOpacity>
+            <Link href="/profile" asChild>
+              <TouchableOpacity style={styles.profileButton}>
+                <FontAwesome5 name="user" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </Link>
           </View>
         </View>
 
@@ -341,7 +302,7 @@ export default function PremiumHomeScreen() {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search movies, cinemas..."
+            placeholder="Tìm phim, rạp chiếu..."
             placeholderTextColor="#a78bfa"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -360,18 +321,18 @@ export default function PremiumHomeScreen() {
         {/* Featured Movies Carousel */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>FEATURED PREMIUM</Text>
+            <Text style={styles.sectionTitle}>PHIM ĐỀ CỬ CAO CẤP</Text>
             <TouchableOpacity>
-              <Text style={styles.seeAllText}>VIEW ALL</Text>
+              <Text style={styles.seeAllText}>XEM TẤT CẢ</Text>
             </TouchableOpacity>
           </View>
           <FlatList
             horizontal
-            data={featuredMovies}
+            // SỬA DÒNG NÀY: Dùng hotMovies thay vì featuredMovies
+            data={hotMovies.length > 0 ? hotMovies : moviesFromDb}
             renderItem={({ item }) => <MovieCard movie={item} size="large" />}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id.toString()}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featuredList}
             snapToInterval={width * 0.85}
             decelerationRate="fast"
           />
@@ -383,7 +344,7 @@ export default function PremiumHomeScreen() {
             <View style={[styles.actionIcon, { backgroundColor: "#FF6B35" }]}>
               <MaterialIcons name="local-movies" size={24} color="#FFF" />
             </View>
-            <Text style={styles.actionText}>Book Now</Text>
+            <Text style={styles.actionText}>Đặt vé ngay</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickAction}>
             <View style={[styles.actionIcon, { backgroundColor: "#00B4D8" }]}>
@@ -393,25 +354,25 @@ export default function PremiumHomeScreen() {
                 color="#FFF"
               />
             </View>
-            <Text style={styles.actionText}>My Tickets</Text>
+            <Text style={styles.actionText}>Vé của tôi</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickAction}>
             <View style={[styles.actionIcon, { backgroundColor: "#9D4EDD" }]}>
               <FontAwesome5 name="crown" size={20} color="#FFF" />
             </View>
-            <Text style={styles.actionText}>VIP Club</Text>
+            <Text style={styles.actionText}>Câu lạc bộ VIP</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickAction}>
             <View style={[styles.actionIcon, { backgroundColor: "#4CAF50" }]}>
               <MaterialIcons name="restaurant" size={24} color="#FFF" />
             </View>
-            <Text style={styles.actionText}>Food & Drinks</Text>
+            <Text style={styles.actionText}>Đồ ăn & Thức uống</Text>
           </TouchableOpacity>
         </View>
 
         {/* Now Playing / Coming Soon Tabs */}
         <View style={styles.tabContainer}>
-          {["NOW PLAYING", "COMING SOON", "SPECIAL EVENTS"].map((tab) => (
+          {["ĐANG CHIẾU", "SẮP CHIẾU", "SỰ KIỆN ĐẶC BIỆT"].map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[
@@ -449,9 +410,9 @@ export default function PremiumHomeScreen() {
         {/* Premium Cinemas */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>PREMIUM CINEMAS NEAR YOU</Text>
+            <Text style={styles.sectionTitle}>RẠP CAO CẤP GẦN BẠN</Text>
             <TouchableOpacity>
-              <Text style={styles.seeAllText}>MAP VIEW</Text>
+              <Text style={styles.seeAllText}>XEM TRÊN BẢN ĐỒ</Text>
             </TouchableOpacity>
           </View>
           {cinemas.map((cinema) => (
@@ -462,15 +423,19 @@ export default function PremiumHomeScreen() {
         {/* Upcoming Movies */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>COMING SOON</Text>
+            <Text style={styles.sectionTitle}>PHIM SẮP CHIẾU</Text>
             <TouchableOpacity>
-              <Text style={styles.seeAllText}>CALENDAR</Text>
+              <Text style={styles.seeAllText}>LỊCH CHIẾU</Text>
             </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {upcomingMovies.map((movie) => (
-              <UpcomingMovieCard key={movie.id} movie={movie} />
-            ))}
+            {moviesFromDb
+              .filter(
+                (movie) => movie.status === "upcoming" || movie.year === 2024
+              ) // Lọc phim sắp chiếu
+              .map((movie) => (
+                <UpcomingMovieCard key={movie.id} movie={movie} />
+              ))}
           </ScrollView>
         </View>
 
@@ -482,13 +447,13 @@ export default function PremiumHomeScreen() {
           <View style={styles.membershipContent}>
             <FontAwesome5 name="crown" size={40} color="#FFD700" />
             <View style={styles.membershipText}>
-              <Text style={styles.membershipTitle}>ELITE MEMBERSHIP</Text>
+              <Text style={styles.membershipTitle}>THÀNH VIÊN ELITE</Text>
               <Text style={styles.membershipSubtitle}>
-                Get 20% off all tickets + Free upgrades
+                Nhận ưu đãi 20% tất cả vé + Nâng cấp miễn phí
               </Text>
             </View>
             <TouchableOpacity style={styles.joinButton}>
-              <Text style={styles.joinButtonText}>JOIN NOW</Text>
+              <Text style={styles.joinButtonText}>THAM GIA NGAY</Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -541,6 +506,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 15,
   },
+
   iconButton: {
     padding: 5,
   },
