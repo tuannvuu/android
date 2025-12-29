@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { onValue, ref } from "firebase/database";
+
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -202,11 +203,13 @@ export default function CinemaMovies() {
   };
 
   const navigateToSeatSelection = (movieId: string, showtimeId: string) => {
-    alert(`Chọn ghế cho suất ${showtimeId}`);
-    // router.push({
-    //   pathname: "/seat-selection",
-    //   params: { movieId, showtimeId },
-    // });
+    router.push({
+      pathname: "/select-seat",
+      params: {
+        movieId,
+        showtimeId,
+      },
+    });
   };
 
   const renderShowtimeButton = (showtime: Showtime, movieId: string) => (

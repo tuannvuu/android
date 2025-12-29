@@ -303,7 +303,16 @@ export default function MovieDetails() {
             </View>
             <TouchableOpacity
               style={styles.bookingButton}
-              onPress={() => alert("Chuyển đến màn hình chọn ghế...")}
+              onPress={() => {
+                router.push({
+                  pathname: "/cinema-movies",
+                  params: {
+                    id: movie.id,
+                    title: movie.title,
+                    price: 75000,
+                  },
+                });
+              }}
             >
               <LinearGradient
                 colors={["#667eea", "#764ba2"]}

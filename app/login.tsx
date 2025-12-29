@@ -1,4 +1,4 @@
-import { db } from "@/config/firebase";
+import { db } from "../config/firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
 import { get, ref } from "firebase/database";

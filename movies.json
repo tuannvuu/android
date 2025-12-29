@@ -1,0 +1,141 @@
+{
+  "1": {
+    "id": "1",
+    "title": "DUNE: PHẦN HAI",
+    "poster": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800",
+    "rating": 4.8,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": true
+  },
+  "2": {
+    "id": "2",
+    "title": "Đứa con sau vườn",
+    "poster": "https://iguov8nhvyobj.vcdn.cloud/media/catalog/product/cache/1/thumbnail/190x260/2e2b8cd282892c71872b9e67d2cb5039/4/7/470_x_700-call_of_the_dead.jpg",
+    "rating": 4.6,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": true
+  },
+  "3": {
+    "id": "3",
+    "title": "Cảm xúc kỳ diệu 2",
+    "poster": "https://images.unsplash.com/photo-1574267432553-4b4628081c31?w=800",
+    "rating": 4.5,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": false
+  },
+  "4": {
+    "id": "4",
+    "title": "AVATAR 3",
+    "poster": "https://images.unsplash.com/photo-1517602302552-471fe67acf66?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": false
+  },
+  "5": {
+    "id": "5",
+    "title": "KẺ HỦY DIỆT",
+    "poster": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": false
+  },
+
+  "6": {
+    "id": "6",
+    "title": "NGƯỜI NHỆN: VŨ TRỤ MỚI",
+    "poster": "https://images.unsplash.com/photo-1606112219348-204d7d8b94ee?w=800",
+    "rating": 4.7,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": true
+  },
+  "7": {
+    "id": "7",
+    "title": "THỢ SĂN QUỶ",
+    "poster": "https://images.unsplash.com/photo-1502139214982-d0ad755818d8?w=800",
+    "rating": 4.4,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": false
+  },
+  "8": {
+    "id": "8",
+    "title": "BIỆT ĐỘI SIÊU ANH HÙNG: HỒI KẾT",
+    "poster": "https://images.unsplash.com/photo-1517602302552-471fe67acf66?w=800",
+    "rating": 4.9,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": true
+  },
+  "9": {
+    "id": "9",
+    "title": "KẺ SĂN BÓNG ĐÊM",
+    "poster": "https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?w=800",
+    "rating": 4.3,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": false
+  },
+  "10": {
+    "id": "10",
+    "title": "HÀNH TRÌNH CUỐI CÙNG",
+    "poster": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800",
+    "rating": 4.2,
+    "status": "nowPlaying",
+    "year": 2024,
+    "isHot": false
+  },
+  "11": {
+    "id": "11",
+    "title": "VƯƠNG QUỐC BÓNG TỐI",
+    "poster": "https://images.unsplash.com/photo-1497032205916-ac775f0649ae?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": false
+  },
+  "12": {
+    "id": "12",
+    "title": "CUỘC CHIẾN THỜI GIAN",
+    "poster": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": true
+  },
+  "13": {
+    "id": "13",
+    "title": "THÀNH PHỐ SAU CƠN MƯA",
+    "poster": "https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": false
+  },
+  "14": {
+    "id": "14",
+    "title": "BÍ ẨN DƯỚI ĐÁY BIỂN",
+    "poster": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": false
+  },
+  "15": {
+    "id": "15",
+    "title": "KÝ ỨC CUỐI CÙNG",
+    "poster": "https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?w=800",
+    "rating": 0,
+    "status": "comingSoon",
+    "year": 2025,
+    "isHot": true
+  }
+}
+
+  
+

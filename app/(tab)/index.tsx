@@ -31,14 +31,6 @@ interface Cinema {
   features: string[];
 }
 
-interface UpcomingMovie {
-  id: string;
-  title: string;
-  releaseDate: string;
-  poster: string;
-  tag: string;
-}
-
 // MOCK DATA - PREMIUM MOVIES
 
 const cinemas: Cinema[] = [
@@ -198,30 +190,17 @@ const CinemaCard = ({ cinema }: { cinema: Cinema }) => {
   );
 };
 
-const UpcomingMovieCard = ({ movie }: { movie: UpcomingMovie }) => (
-  <TouchableOpacity style={styles.upcomingCard}>
-    <Image source={{ uri: movie.poster }} style={styles.upcomingPoster} />
-    <View style={styles.upcomingInfo}>
-      <Text style={styles.upcomingTag}>{movie.tag}</Text>
-      <Text style={styles.upcomingTitle}>{movie.title}</Text>
-      <View style={styles.releaseDate}>
-        <MaterialIcons name="date-range" size={16} color="#667eea" />
-        <Text style={styles.releaseDateText}>
-          Khởi chiếu {movie.releaseDate}
-        </Text>
-      </View>
-      <TouchableOpacity style={styles.remindButton}>
-        <Text style={styles.remindButtonText}>NHẮC TÔI</Text>
-      </TouchableOpacity>
-    </View>
-  </TouchableOpacity>
-);
-
 export default function PremiumHomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [activeTab, setActiveTab] = useState("nowplaying");
+  const [activeTab, setActiveTab] = useState<TabType>("nowPlaying");
   const [moviesFromDb, setMoviesFromDb] = useState<any[]>([]);
+  type TabType = "nowPlaying" | "comingSoon" | "special";
+  const TABS: { label: string; value: TabType }[] = [
+    { label: "ĐANG CHIẾU", value: "nowPlaying" },
+    { label: "SẮP CHIẾU", value: "comingSoon" },
+    { label: "SỰ KIỆN ĐẶC BIỆT", value: "special" },
+  ];
 
   useEffect(() => {
     const moviesRef = ref(db, "movies");
@@ -237,7 +216,6 @@ export default function PremiumHomeScreen() {
         setMoviesFromDb(movieList);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -250,18 +228,24 @@ export default function PremiumHomeScreen() {
   const hotMovies = filteredMovies.filter((movie) => movie.isHot === true);
 
   // 3. Lọc phim Đang chiếu từ danh sách ĐÃ SEARCH
-  const nowPlayingMovies = filteredMovies.filter((movie) => {
-    // Chuyển status về chữ thường trước khi so sánh để tránh lỗi viết hoa/thường
-    const status = movie.status?.toLowerCase();
-    return status === "nowplaying" || status === "đang chiếu";
-  });
 
-  // 4. Lọc phim Sắp chiếu từ danh sách ĐÃ SEARCH
-  const upcomingMovies = filteredMovies.filter(
-    (movie) => movie.status === "upcoming" || movie.year === 2024
+  const nowPlayingMovies = filteredMovies.filter(
+    (movie) => movie.status === "nowPlaying"
   );
 
-  // Lọc ra phim Hot để đưa lên đầu (Featured)
+  const comingSoonMovies = filteredMovies.filter(
+    (movie) => movie.status === "comingSoon"
+  );
+  const moviesByTab = (() => {
+    switch (activeTab) {
+      case "nowPlaying":
+        return nowPlayingMovies;
+      case "comingSoon":
+        return comingSoonMovies;
+      default:
+        return [];
+    }
+  })();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -364,25 +348,21 @@ export default function PremiumHomeScreen() {
         </View>
 
         {/* Now Playing / Coming Soon Tabs */}
+
         <View style={styles.tabContainer}>
-          {["ĐANG CHIẾU", "SẮP CHIẾU", "SỰ KIỆN ĐẶC BIỆT"].map((tab) => (
+          {TABS.map((tab) => (
             <TouchableOpacity
-              key={tab}
-              style={[
-                styles.tab,
-                activeTab === tab.toLowerCase().replace(" ", "") &&
-                  styles.activeTab,
-              ]}
-              onPress={() => setActiveTab(tab.toLowerCase().replace(" ", ""))}
+              key={tab.value}
+              style={[styles.tab, activeTab === tab.value && styles.activeTab]}
+              onPress={() => setActiveTab(tab.value as TabType)}
             >
               <Text
                 style={[
                   styles.tabText,
-                  activeTab === tab.toLowerCase().replace(" ", "") &&
-                    styles.activeTabText,
+                  activeTab === tab.value && styles.activeTabText,
                 ]}
               >
-                {tab}
+                {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -392,7 +372,7 @@ export default function PremiumHomeScreen() {
         <View style={styles.section}>
           <FlatList
             horizontal
-            data={nowPlayingMovies}
+            data={moviesByTab}
             renderItem={({ item }) => <MovieCard movie={item} size="medium" />}
             keyExtractor={(item) => item.id}
             showsHorizontalScrollIndicator={false}
@@ -412,27 +392,6 @@ export default function PremiumHomeScreen() {
             <CinemaCard key={cinema.id} cinema={cinema} />
           ))}
         </View>
-
-        {/* Upcoming Movies */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>PHIM SẮP CHIẾU</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>LỊCH CHIẾU</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {upcomingMovies.map(
-              (
-                movie,
-                index // Sử dụng biến đã lọc ở Bước 1
-              ) => (
-                <UpcomingMovieCard key={movie.id || index} movie={movie} />
-              )
-            )}
-          </ScrollView>
-        </View>
-
         {/* Membership Banner */}
         <LinearGradient
           colors={["#667eea", "#764ba2"]}

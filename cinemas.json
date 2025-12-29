@@ -1,0 +1,23 @@
+{
+  "1": {
+    "id": "1",
+    "name": "Rạp IMAX LiDoRa",
+    "location": "Trung tâm Thành phố",
+    "distance": "0.8 km",
+    "features": ["IMAX", "4DX", "Phòng chờ VIP", "Dolby Atmos"]
+  },
+  "2": {
+    "id": "2",
+    "name": "Galaxy Premium Cinema",
+    "location": "Trung tâm mua sắm Westgate",
+    "distance": "3.4 km",
+    "features": ["IMAX", "ScreenX", "Gold Class"]
+  },
+  "3": {
+    "id": "3",
+    "name": "Rạp Starlight",
+    "location": "Quảng trường Riverside",
+    "distance": "5.5 km",
+    "features": ["4DX", "Thân thiện trẻ em", "Quầy bar"]
+  }
+}
