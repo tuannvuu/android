@@ -1,0 +1,22 @@
+{
+  "pm1": {
+    "id": "pm1",
+    "bookingId": "bk1",
+    "userId": "0796573363",
+    "method": "MOMO",
+    "amount": 240000,
+    "status": "SUCCESS",
+    "transactionId": "MOMO_20250101_001",
+    "paidAt": "2025-01-01T10:32:10Z"
+  },
+  "pm2": {
+    "id": "pm2",
+    "bookingId": "bk2",
+    "userId": "0716573363",
+    "method": "ZALOPAY",
+    "amount": 300000,
+    "status": "FAILED",
+    "transactionId": "ZALO_20250102_014",
+    "paidAt": null
+  }
+}

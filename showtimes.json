@@ -1,0 +1,38 @@
+{
+  "st1": {
+    "id": "st1",
+    "movieId": "1",
+    "cinemaId": "1",
+    "date": "2025-01-05",
+    "time": "09:00",
+    "format": "IMAX",
+    "room": "Rạp 1",
+    "price": 120000,
+    "totalSeats": 100,
+    "availableSeats": 72
+  },
+  "st2": {
+    "id": "st2",
+    "movieId": "1",
+    "cinemaId": "1",
+    "date": "2025-01-05",
+    "time": "14:00",
+    "format": "2D",
+    "room": "Rạp 2",
+    "price": 75000,
+    "totalSeats": 120,
+    "availableSeats": 90
+  },
+  "st3": {
+    "id": "st3",
+    "movieId": "2",
+    "cinemaId": "2",
+    "date": "2025-01-06",
+    "time": "19:30",
+    "format": "4DX",
+    "room": "Rạp VIP",
+    "price": 150000,
+    "totalSeats": 80,
+    "availableSeats": 55
+  }
+}

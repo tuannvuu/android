@@ -1,0 +1,24 @@
+{
+  "bk1": {
+    "id": "bk1",
+    "userId": "0796573363",
+    "showtimeId": "st1",
+    "movieId": "1",
+    "cinemaId": "1",
+    "seats": ["C5", "C6"],
+    "totalPrice": 240000,
+    "status": "CONFIRMED",
+    "createdAt": "2025-01-01T10:30:00Z"
+  },
+  "bk2": {
+    "id": "bk2",
+    "userId": "0716573363",
+    "showtimeId": "st3",
+    "movieId": "2",
+    "cinemaId": "2",
+    "seats": ["E5", "E6"],
+    "totalPrice": 300000,
+    "status": "PENDING",
+    "createdAt": "2025-01-02T14:15:00Z"
+  }
+}
