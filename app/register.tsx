@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
-import { get, ref, set } from "firebase/database";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   Check,
   Eye,
@@ -29,8 +29,9 @@ import {
 const { width } = Dimensions.get("window");
 
 export default function RegisterScreen() {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState(""); // Đổi email thành phone cho dễ hiểu
+  // Đồng bộ tên biến: Dùng 'fullName' thay cho 'name'
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -39,45 +40,57 @@ export default function RegisterScreen() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !phone || !password) {
-      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin");
+    // Kiểm tra các điều kiện cơ bản
+    if (!phone || !password || !fullName) {
+      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ thông tin");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp");
+      return;
+    }
+
+    if (!termsAccepted) {
+      Alert.alert("Lỗi", "Bạn phải đồng ý với điều khoản sử dụng");
       return;
     }
 
     try {
       setLoading(true);
-      const userRef = ref(db, "users/" + phone.trim());
 
-      // Kiểm tra xem số điện thoại đã tồn tại chưa
-      const snapshot = await get(userRef);
-      if (snapshot.exists()) {
+      // 1. Kiểm tra xem số điện thoại đã tồn tại chưa
+      const userRef = doc(db, "users", phone.trim());
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
         Alert.alert("Lỗi", "Số điện thoại này đã được đăng ký!");
-        setLoading(false);
         return;
       }
 
-      // Dùng hàm 'set' để lưu (đã sửa lỗi 'Cannot find name set')
-      await set(userRef, {
-        fullName: name,
-        password: password,
+      // 2. Tạo tài khoản mới trong Firestore
+      await setDoc(userRef, {
+        fullName: fullName.trim(),
         phone: phone.trim(),
-        createdAt: new Date().toISOString(),
+        password: password,
+        createdAt: serverTimestamp(),
+        role: "user",
       });
 
       Alert.alert("Thành công", "Đăng ký tài khoản thành công!", [
-        { text: "Đăng nhập ngay", onPress: () => router.push("/login") },
+        { text: "OK", onPress: () => router.replace("/login") },
       ]);
     } catch (error: any) {
-      // Sử dụng biến 'error' ở đây để hết lỗi ESLint
-      console.error("Lỗi đăng ký:", error.message);
-      Alert.alert("Lỗi", "Không thể đăng ký tài khoản lúc này.");
+      console.error("Register Error:", error.message);
+      Alert.alert("Lỗi", "Không thể đăng ký. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Cập nhật hàm kiểm tra valid
   const isFormValid = () => {
-    return name && phone && password && confirmPassword && termsAccepted;
+    return fullName && phone && password && confirmPassword && termsAccepted;
   };
 
   return (
@@ -129,8 +142,8 @@ export default function RegisterScreen() {
                 style={styles.input}
                 placeholder="Nguyễn Tuấn Vũ"
                 placeholderTextColor="#a78bfa"
-                value={name}
-                onChangeText={setName}
+                value={fullName}
+                onChangeText={setFullName}
                 editable={!loading}
               />
             </View>

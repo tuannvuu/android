@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import { onValue, ref } from "firebase/database";
+import { router, useLocalSearchParams } from "expo-router";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../config/firebase"; // Đảm bảo đường dẫn đúng
 
 import React, { useEffect, useState } from "react";
 import {
@@ -19,7 +20,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../config/firebase";
 
 const { height } = Dimensions.get("window");
 
@@ -28,21 +28,19 @@ interface Movie {
   title: string;
   poster: string;
   rating: number;
+  genre: string;
   duration: string;
-  year: string;
-  genres: string[];
-  description: string;
-  director?: string;
-  cast?: string[];
+  year: string | number;
+  cinemaId: string;
 }
 
 interface Showtime {
   id: string;
   time: string;
-  format: string;
   theater: string;
+  format: string;
   price: number;
-  seats: number;
+  seats: string[];
 }
 
 export default function CinemaMovies() {
@@ -55,7 +53,8 @@ export default function CinemaMovies() {
   const [selectedDate, setSelectedDate] = useState<string>("today");
   const [selectedFormat, setSelectedFormat] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [allGenres, setAllGenres] = useState<string[]>([]);
+  const [allGenres] = useState<string[]>([]);
+  const { cinemaId } = useLocalSearchParams<{ cinemaId: string }>();
 
   // Ngày chiếu mẫu
   const dates = [
@@ -76,36 +75,37 @@ export default function CinemaMovies() {
   ];
 
   useEffect(() => {
-    // Lấy danh sách phim
-    const moviesRef = ref(db, "movies");
-    const moviesUnsubscribe = onValue(moviesRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const moviesArray: Movie[] = Object.keys(data).map((key) => ({
-          id: key,
-          ...data[key],
-        }));
+    if (!cinemaId) {
+      console.log("Đang đợi cinemaId...");
+      return;
+    }
+    setLoading(true);
 
-        setMovies(moviesArray);
-        setFilteredMovies(moviesArray);
+    // ✅ Cách làm đúng với Firestore
+    // Giả sử bạn tìm phim theo cinemaId
+    const moviesRef = collection(db, "movies");
+    const q = query(moviesRef, where("cinemaId", "==", cinemaId));
 
-        // Tạo dữ liệu giờ chiếu mẫu
-        generateMockShowtimes(moviesArray);
-
-        // Extract all unique genres
-        const genresSet = new Set<string>();
-        moviesArray.forEach((movie) => {
-          if (movie.genres && Array.isArray(movie.genres)) {
-            movie.genres.forEach((genre) => genresSet.add(genre));
-          }
-        });
-        setAllGenres(Array.from(genresSet));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const moviesData = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Movie[];
+        setMovies(moviesData);
+        if (moviesData.length > 0) {
+          generateMockShowtimes(moviesData);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Lỗi lấy danh sách phim tại rạp:", error);
+        setLoading(false);
       }
-      setLoading(false);
-    });
-
-    return () => moviesUnsubscribe();
-  }, []);
+    );
+    return () => unsubscribe();
+  }, [cinemaId]);
 
   const generateMockShowtimes = (movies: Movie[]) => {
     const showtimesData: Record<string, Showtime[]> = {};
@@ -139,7 +139,10 @@ export default function CinemaMovies() {
           format: randomFormat,
           theater: randomTheater,
           price: basePrice,
-          seats: Math.floor(Math.random() * 20) + 10, // 10-30 ghế trống
+          seats: Array.from(
+            { length: Math.floor(Math.random() * 20) + 10 },
+            (_, i) => `S${i + 1}`
+          ),
         });
       }
 
@@ -165,7 +168,7 @@ export default function CinemaMovies() {
     // Apply genre filter
     if (selectedGenres.length > 0) {
       result = result.filter((movie) =>
-        selectedGenres.some((genre) => movie.genres?.includes(genre))
+        selectedGenres.some((genre) => movie.genre?.includes(genre))
       );
     }
 
@@ -285,11 +288,17 @@ export default function CinemaMovies() {
             </View>
 
             <View style={styles.genreTags}>
-              {item.genres?.slice(0, 3).map((genre, index) => (
-                <View key={index} style={styles.genreTag}>
-                  <Text style={styles.genreTagText}>{genre}</Text>
-                </View>
-              ))}
+              {/* Chuyển đổi từ chuỗi thành mảng nếu cần và map qua từng phần tử */}
+              {(typeof item.genre === "string"
+                ? item.genre.split(",")
+                : item.genre || []
+              )
+                .slice(0, 3)
+                .map((genreName: string, index: number) => (
+                  <View key={index} style={styles.genreTag}>
+                    <Text style={styles.genreTagText}>{genreName.trim()}</Text>
+                  </View>
+                ))}
             </View>
           </View>
         </TouchableOpacity>

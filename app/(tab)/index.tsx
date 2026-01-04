@@ -1,14 +1,13 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router, useRouter } from "expo-router";
-import { onValue, ref } from "firebase/database";
-
-import React, { useEffect, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,10 +16,19 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../../config/firebase";
 
 const { width } = Dimensions.get("window");
-
+interface Movie {
+  id: string;
+  title: string;
+  poster: string;
+  rating: number;
+  year: number;
+  status: "nowPlaying" | "comingSoon";
+  isHot: boolean;
+}
 // INTERFACE FOR TYPES
 
 interface Cinema {
@@ -192,60 +200,75 @@ const CinemaCard = ({ cinema }: { cinema: Cinema }) => {
 
 export default function PremiumHomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("nowPlaying");
-  const [moviesFromDb, setMoviesFromDb] = useState<any[]>([]);
+
   type TabType = "nowPlaying" | "comingSoon" | "special";
+
   const TABS: { label: string; value: TabType }[] = [
     { label: "ĐANG CHIẾU", value: "nowPlaying" },
     { label: "SẮP CHIẾU", value: "comingSoon" },
     { label: "SỰ KIỆN ĐẶC BIỆT", value: "special" },
   ];
 
+  // 1. Fetch dữ liệu từ Firestore
   useEffect(() => {
-    const moviesRef = ref(db, "movies");
+    const moviesRef = collection(db, "movies");
+    const unsubscribe = onSnapshot(
+      moviesRef,
+      (snapshot) => {
+        const movieList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Movie[];
 
-    const unsubscribe = onValue(moviesRef, (snapshot) => {
-      const data = snapshot.val();
-
-      if (data) {
-        const movieList = Object.keys(data).map((key) => ({
-          ...data[key],
-          id: key,
-        }));
-        setMoviesFromDb(movieList);
+        setMovies(movieList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Lỗi Firestore:", error);
+        setLoading(false);
       }
-    });
+    );
+
     return () => unsubscribe();
   }, []);
 
-  // 1. Lọc tất cả phim theo từ khóa search trước
-  const filteredMovies = moviesFromDb.filter((movie) =>
-    movie.title?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // 2. Logic lọc phim dùng useMemo (Chỉ giữ lại duy nhất đoạn này)
+  // Xóa bỏ tất cả các biến filteredMovies, hotMovies, nowPlayingMovies rời rạc bên dưới
+  const moviesByTab = useMemo(() => {
+    const filtered = movies.filter((movie) =>
+      (movie.title ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-  // 2. Lọc phim Hot từ danh sách ĐÃ SEARCH (Featured)
-  const hotMovies = filteredMovies.filter((movie) => movie.isHot === true);
-
-  // 3. Lọc phim Đang chiếu từ danh sách ĐÃ SEARCH
-
-  const nowPlayingMovies = filteredMovies.filter(
-    (movie) => movie.status === "nowPlaying"
-  );
-
-  const comingSoonMovies = filteredMovies.filter(
-    (movie) => movie.status === "comingSoon"
-  );
-  const moviesByTab = (() => {
     switch (activeTab) {
       case "nowPlaying":
-        return nowPlayingMovies;
+        return filtered.filter((m) => m.status === "nowPlaying");
       case "comingSoon":
-        return comingSoonMovies;
+        return filtered.filter((m) => m.status === "comingSoon");
+      case "special":
+        return filtered.filter((m) => m.isHot); // Đây chính là 'hotMovies' trước đây
       default:
         return [];
     }
-  })();
+  }, [movies, searchQuery, activeTab]);
+
+  // 3. Xử lý trạng thái Loading
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "#0A0A0F",
+        }}
+      >
+        <ActivityIndicator size="large" color="#667eea" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -306,7 +329,7 @@ export default function PremiumHomeScreen() {
           <FlatList
             horizontal
             // SỬA DÒNG NÀY: Dùng hotMovies thay vì featuredMovies
-            data={hotMovies.length > 0 ? hotMovies : filteredMovies}
+            data={moviesByTab}
             renderItem={({ item }) => <MovieCard movie={item} size="large" />}
             keyExtractor={(item) => item.id.toString()}
             showsHorizontalScrollIndicator={false}

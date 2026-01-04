@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { onValue, ref } from "firebase/database";
+import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,25 +18,58 @@ import {
 } from "react-native";
 import { db } from "../config/firebase";
 
+interface Movie {
+  id: string;
+  title: string;
+  poster: string;
+  rating: number;
+  genre?: string; // Dùng số ít theo đề xuất của TS
+  genres?: string[]; // Hoặc thêm cả mảng nếu bạn dùng map
+  cast?: string[]; // Thêm cast
+  director?: string; // Thêm director
+  year?: string | number; // Thêm year
+  description?: string;
+  duration?: string;
+  releaseDate?: string;
+  status?: string;
+  isHot?: boolean;
+}
+
 const { width, height } = Dimensions.get("window");
 const HEADER_HEIGHT = Platform.OS === "ios" ? 100 : 80;
 const POSTER_HEIGHT = height * 0.55;
 
 export default function MovieDetails() {
   const { id } = useLocalSearchParams();
-  const [movie, setMovie] = useState<any>(null);
+  const [movie, setMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
   const scrollY = new Animated.Value(0);
 
   useEffect(() => {
-    if (id) {
-      const movieRef = ref(db, `movies/${id}`);
-      const unsubscribe = onValue(movieRef, (snapshot) => {
-        setMovie(snapshot.val());
+    if (!id) return;
+
+    const movieRef = doc(db, "movies", id as string);
+
+    const unsubscribe = onSnapshot(
+      movieRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setMovie({
+            ...(snapshot.data() as Movie), // Đưa spread lên trước
+            id: snapshot.id, // Gán id sau để đảm bảo không bị ghi đè sai
+          });
+        } else {
+          setMovie(null);
+        }
         setLoading(false);
-      });
-      return () => unsubscribe();
-    }
+      },
+      (error) => {
+        console.error("Lỗi Firestore:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [id]);
 
   // Animation cho header

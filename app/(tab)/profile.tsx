@@ -1,7 +1,7 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { get, ref } from "firebase/database";
+import { doc, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { db } from "../../config/firebase"; // Đảm bảo đường dẫn đúng
@@ -11,19 +11,30 @@ export default function ProfileScreen() {
   const userPhone = "0796573363"; // Thực tế sẽ lấy từ AsyncStorage sau khi login
 
   useEffect(() => {
-    // Lấy thông tin từ Database dựa trên SĐT
-    const fetchUserData = async () => {
-      try {
-        const userRef = ref(db, "users/" + userPhone);
-        const snapshot = await get(userRef);
+    // Giả sử bạn lưu phone trong bộ nhớ hoặc lấy từ Auth
+    const userPhone = "0123456789"; // Thay bằng biến phone thực tế của bạn
+
+    if (!userPhone) return;
+
+    // ✅ Cách lấy dữ liệu từ Firestore
+    const userRef = doc(db, "users", userPhone);
+
+    // Dùng onSnapshot để cập nhật dữ liệu thời gian thực (Real-time)
+    const unsubscribe = onSnapshot(
+      userRef,
+      (snapshot) => {
         if (snapshot.exists()) {
-          setUserData(snapshot.val());
+          setUserData(snapshot.data());
+        } else {
+          console.log("Không tìm thấy người dùng");
         }
-      } catch (error) {
-        console.error("Lỗi lấy dữ liệu:", error);
+      },
+      (error) => {
+        console.error("Lỗi lấy dữ liệu Profile:", error);
       }
-    };
-    fetchUserData();
+    );
+
+    return () => unsubscribe();
   }, []);
 
   const handleLogout = () => {

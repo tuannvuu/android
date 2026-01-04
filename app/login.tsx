@@ -1,7 +1,6 @@
-import { db } from "../config/firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
-import { get, ref } from "firebase/database";
+import { doc, getDoc } from "firebase/firestore";
 import { Eye, EyeOff, Film, Lock, Smartphone } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -16,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { db } from "../config/firebase";
 const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
@@ -33,16 +33,19 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      // Sử dụng 'ref' và 'db' đúng cách
-      const userRef = ref(db, "users/" + phone.trim());
-
-      // Sử dụng 'get' để lấy dữ liệu
-      const snapshot = await get(userRef);
+      // ✅ Sửa logic Firestore: tìm tài liệu trong collection 'users' có ID là số điện thoại
+      const userRef = doc(db, "users", phone.trim());
+      const snapshot = await getDoc(userRef);
 
       if (snapshot.exists()) {
-        const userData = snapshot.val();
+        const userData = snapshot.data();
 
-        // So khớp mật khẩu thuần túy theo ý bạn
+        // Kiểm tra xem trường password có tồn tại trong DB không
+        if (!userData.password) {
+          Alert.alert("Lỗi", "Tài khoản này chưa thiết lập mật khẩu.");
+          return;
+        }
+
         if (userData.password === password) {
           router.replace("/(tab)");
         } else {
@@ -52,9 +55,8 @@ export default function LoginScreen() {
         Alert.alert("Lỗi", "Số điện thoại chưa được đăng ký");
       }
     } catch (error: any) {
-      // Sử dụng biến 'error' ở đây để hết lỗi ESLint
       console.error("Login Error:", error.message);
-      Alert.alert("Lỗi", "Đã xảy ra lỗi hệ thống. Vui lòng thử lại.");
+      Alert.alert("Lỗi", "Đã xảy ra lỗi hệ thống.");
     } finally {
       setLoading(false);
     }
