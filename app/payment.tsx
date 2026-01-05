@@ -1,18 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { NavigationProp, RouteProp } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router"; //
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
-  serverTimestamp,
+  getDocs,
+  serverTimestamp, // Thêm cái này
+  setDoc,
   Timestamp,
-  updateDoc,
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -23,7 +25,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth, db } from "../config/firebase";
+import { db } from "../config/firebase";
 
 // Define types
 type RootStackParamList = {
@@ -85,7 +87,8 @@ interface CinemaData {
 
 export default function Payment({ route, navigation }: PaymentProps) {
   // Lấy bookingId từ params
-  const { bookingId } = route.params;
+  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
+  const router = useRouter();
 
   // State quản lý thông tin
   const [loading, setLoading] = useState(true);
@@ -108,16 +111,19 @@ export default function Payment({ route, navigation }: PaymentProps) {
 
   // State cho tổng tiền
   const [subtotal, setSubtotal] = useState(0);
-  const [serviceFee, setServiceFee] = useState(10000);
+  const [serviceFee] = useState(10000);
+
   const [discountAmount, setDiscountAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
 
   // Fetch booking data từ Firestore
   const fetchBookingData = useCallback(async () => {
+    if (!bookingId) return;
+
     try {
       setLoading(true);
 
-      // Lấy thông tin booking từ Firestore
+      // 1. Lấy thông tin Booking từ collection 'bookings'
       const bookingRef = doc(db, "bookings", bookingId);
       const bookingSnap = await getDoc(bookingRef);
 
@@ -131,19 +137,31 @@ export default function Payment({ route, navigation }: PaymentProps) {
       } as BookingData;
       setBookingData(booking);
 
-      // Lấy thông tin movie
+      // 2. Truy vấn dữ liệu Phim (để lấy title và posterUrl)
       if (booking.movieId) {
-        const movieRef = doc(db, "movies", booking.movieId);
+        // Đảm bảo movieId được ép kiểu string để khớp với Document ID trong Firestore
+        const movieRef = doc(db, "movies", String(booking.movieId));
         const movieSnap = await getDoc(movieRef);
         if (movieSnap.exists()) {
-          setMovieData({ id: movieSnap.id, ...movieSnap.data() } as MovieData);
+          const movieInfo = {
+            id: movieSnap.id,
+            ...movieSnap.data(),
+          } as MovieData;
+          setMovieData(movieInfo);
+          // Log để kiểm tra xem đã lấy được posterUrl chưa
+          console.log(
+            "Dữ liệu phim thật:",
+            movieInfo.title,
+            movieInfo.posterUrl
+          );
         }
       }
 
-      // Lấy thông tin showtime
+      // 3. Truy vấn dữ liệu Suất chiếu & Rạp
       if (booking.showtimeId) {
         const showtimeRef = doc(db, "showtimes", booking.showtimeId);
         const showtimeSnap = await getDoc(showtimeRef);
+
         if (showtimeSnap.exists()) {
           const showtime = {
             id: showtimeSnap.id,
@@ -151,7 +169,7 @@ export default function Payment({ route, navigation }: PaymentProps) {
           } as ShowtimeData;
           setShowtimeData(showtime);
 
-          // Lấy thông tin cinema từ showtime
+          // Từ thông tin suất chiếu, truy vấn tiếp lấy tên Rạp thực tế
           if (showtime.cinemaId) {
             const cinemaRef = doc(db, "cinemas", showtime.cinemaId);
             const cinemaSnap = await getDoc(cinemaRef);
@@ -165,31 +183,33 @@ export default function Payment({ route, navigation }: PaymentProps) {
         }
       }
 
-      // Tính toán tổng tiền
+      // 4. Cập nhật số tiền từ dữ liệu thật trong Booking
       const subtotalCalc = booking.totalPrice || 0;
-      const serviceFeeCalc = 10000; // Có thể lấy từ cấu hình
-      const totalCalc = subtotalCalc + serviceFeeCalc;
-
       setSubtotal(subtotalCalc);
-      setServiceFee(serviceFeeCalc);
-      setTotalAmount(totalCalc);
+      setTotalAmount(subtotalCalc + serviceFee);
     } catch (error) {
-      console.error("Lỗi khi fetch dữ liệu:", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin đặt vé");
-      navigation.goBack();
+      console.error("Lỗi fetch dữ liệu thực tế:", error);
+      Alert.alert("Lỗi", "Không thể tải thông tin đặt vé từ hệ thống");
+      if (router.canGoBack()) {
+        router.back();
+      }
     } finally {
       setLoading(false);
     }
-  }, [bookingId, navigation]);
+  }, [bookingId, serviceFee, router]);
 
   useEffect(() => {
     if (bookingId) {
       fetchBookingData();
     } else {
       Alert.alert("Lỗi", "Không tìm thấy thông tin đặt vé");
-      navigation.goBack();
+
+      // ✅ SỬA: Sử dụng router thay cho navigation
+      if (router.canGoBack()) {
+        router.back();
+      }
     }
-  }, [bookingId, fetchBookingData, navigation]);
+  }, [bookingId, fetchBookingData, router]); // Loại bỏ navigation vì Expo Router không dùng biến này
 
   // Format ngày
   const formatDate = (timestamp: Timestamp | Date | string): string => {
@@ -337,52 +357,42 @@ export default function Payment({ route, navigation }: PaymentProps) {
     try {
       setProcessingPayment(true);
 
-      if (!bookingData) {
-        throw new Error("Không có dữ liệu booking");
-      }
+      if (!bookingData) throw new Error("Dữ liệu booking trống");
 
-      // 1. Tạo payment record trong Firestore
-      const paymentData = {
-        bookingId: bookingId,
-        userId: auth.currentUser?.uid || bookingData.userId,
-        amount: totalAmount,
-        discountAmount: discountAmount,
-        paymentMethod: selectedPaymentMethod,
-        paymentStatus: "COMPLETED",
-        transactionId: `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`,
-        createdAt: serverTimestamp(),
+      // 1. Tạo ID đơn hàng tự tăng (bk1, bk2...)
+      const bookingsSnap = await getDocs(collection(db, "bookings"));
+      const nextId = `bk${bookingsSnap.size + 1}`;
+
+      // 2. Chụp ảnh dữ liệu thật để lưu vào đơn hàng
+      const fullBookingData = {
+        ...bookingData,
+        movieId: movieData?.id || "1", // Gán ID thật thay vì "unknown"
+        movieTitle: movieData?.title || "Phim không xác định",
+        //moviePoster: movieData?.poster || "",
+        cinemaName: cinemaData?.name || "Rạp không xác định",
+        totalPrice: totalAmount,
+        status: "PAID",
+        bookingId: nextId,
         updatedAt: serverTimestamp(),
+        paymentMethod: selectedPaymentMethod,
       };
 
-      const paymentRef = await addDoc(collection(db, "payments"), paymentData);
+      // 3. Ghi dữ liệu vào Firestore với ID bkX
+      await setDoc(doc(db, "bookings", nextId), fullBookingData);
 
-      // 2. Cập nhật booking status thành "PAID"
-      const bookingRef = doc(db, "bookings", bookingId);
-      await updateDoc(bookingRef, {
-        status: "PAID",
-        paymentId: paymentRef.id,
-        updatedAt: serverTimestamp(),
-      });
-
-      // 3. Hiển thị thông báo thành công
+      // 4. Thông báo thành công
       Alert.alert(
         "Thành công",
-        `Thanh toán thành công! Mã giao dịch: ${paymentData.transactionId}\nVé đã được gửi đến email của bạn.`,
+        `Thanh toán thành công! Mã đơn của bạn là: ${nextId}`,
         [
           {
             text: "OK",
-            onPress: () => {
-              // Điều hướng về màn hình chính hoặc màn hình vé
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "Home" }],
-              });
-            },
+            onPress: () => router.replace("/"), // Quay về trang chủ
           },
         ]
       );
     } catch (error) {
-      console.error("Lỗi khi xử lý thanh toán:", error);
+      console.error("Lỗi thanh toán:", error);
       Alert.alert("Lỗi", "Thanh toán thất bại. Vui lòng thử lại.");
     } finally {
       setProcessingPayment(false);
@@ -454,92 +464,116 @@ export default function Payment({ route, navigation }: PaymentProps) {
         style={styles.keyboardView}
       >
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Header */}
+          {/* --- Header --- */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Thanh Toán</Text>
             <Text style={styles.headerSubtitle}>Hoàn tất đặt vé của bạn</Text>
             <Text style={styles.bookingId}>
-              Mã đặt vé: {bookingId.substring(0, 8)}...
+              Mã đặt vé: {bookingId ? bookingId.substring(0, 8) : "N/A"}...
             </Text>
           </View>
 
-          {/* Thông tin vé */}
+          {/* --- Thông tin phim và vé --- */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông Tin Vé</Text>
-            <View style={styles.orderInfo}>
-              <View style={styles.movieInfo}>
-                <View style={styles.moviePoster}>
+
+            <View style={styles.movieInfo}>
+              <View style={styles.moviePoster}>
+                {/* Sử dụng Image từ react-native để lấy ảnh thật */}
+                {movieData?.posterUrl ? (
+                  <Image
+                    source={{ uri: movieData.posterUrl }}
+                    style={styles.posterImage}
+                    resizeMode="cover"
+                  />
+                ) : (
                   <Text style={styles.moviePosterText}>🎬</Text>
-                </View>
-                <View style={styles.movieDetails}>
-                  <Text style={styles.movieTitle}>
-                    {movieData?.title || "Không có tiêu đề"}
-                  </Text>
-                  <Text style={styles.cinemaName}>
-                    {cinemaData?.name || "Không xác định"}
-                  </Text>
-                  <View style={styles.showtimeContainer}>
-                    <Ionicons name="calendar-outline" size={16} color="#666" />
-                    <Text style={styles.showtimeText}>
-                      {showtimeData
-                        ? formatDate(showtimeData.startTime)
-                        : "N/A"}
-                    </Text>
-                    <Ionicons
-                      name="time-outline"
-                      size={16}
-                      color="#666"
-                      style={styles.timeIcon}
-                    />
-                    <Text style={styles.showtimeText}>
-                      {showtimeData
-                        ? formatTime(showtimeData.startTime)
-                        : "N/A"}
-                    </Text>
-                  </View>
-                  <View style={styles.seatsContainer}>
-                    <Ionicons name="people-outline" size={16} color="#666" />
-                    <Text style={styles.seatsText}>
-                      Ghế:{" "}
-                      {bookingData.seats ? bookingData.seats.join(", ") : "N/A"}
-                    </Text>
-                  </View>
-                </View>
+                )}
               </View>
 
-              <View style={styles.ticketSummary}>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>
-                    Vé {movieData?.type || "Standard"} x
-                    {bookingData.seats?.length || 0}
+              <View style={styles.movieDetails}>
+                {/* Hiển thị Tên phim thực tế từ MovieData */}
+                <Text style={styles.movieTitle}>
+                  {movieData?.title ||
+                    (loading ? "Đang tải phim..." : "Phim không xác định")}
+                </Text>
+
+                {/* Hiển thị Tên rạp thực tế từ CinemaData */}
+                <Text style={styles.cinemaName}>
+                  {cinemaData?.name ||
+                    (loading ? "Đang tải rạp..." : "Rạp chưa xác định")}
+                </Text>
+
+                <View style={styles.showtimeContainer}>
+                  <Ionicons name="calendar-outline" size={16} color="#666" />
+                  <Text style={styles.showtimeText}>
+                    {showtimeData?.startTime
+                      ? formatDate(showtimeData.startTime)
+                      : "Đang tải..."}
                   </Text>
-                  <Text style={styles.summaryValue}>
-                    {subtotal.toLocaleString()} VND
+
+                  <Ionicons
+                    name="time-outline"
+                    size={16}
+                    color="#666"
+                    style={styles.timeIcon}
+                  />
+                  <Text style={styles.showtimeText}>
+                    {showtimeData?.startTime
+                      ? formatTime(showtimeData.startTime)
+                      : "N/A"}
                   </Text>
                 </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Phí dịch vụ</Text>
-                  <Text style={styles.summaryValue}>
-                    {serviceFee.toLocaleString()} VND
+
+                <View style={styles.seatsContainer}>
+                  <Ionicons name="people-outline" size={16} color="#666" />
+                  <Text style={styles.seatsText}>
+                    Ghế:{" "}
+                    {bookingData?.seats
+                      ? bookingData.seats.join(", ")
+                      : "Chưa chọn"}
                   </Text>
                 </View>
-                {promoApplied && (
-                  <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, styles.discountText]}>
-                      Giảm giá
-                    </Text>
-                    <Text style={[styles.summaryValue, styles.discountText]}>
-                      -{discountAmount.toLocaleString()} VND
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.divider} />
+              </View>
+            </View>
+
+            {/* --- Tóm tắt chi phí --- */}
+            <View style={styles.ticketSummary}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  Vé {movieData?.type || "Standard"} x{" "}
+                  {bookingData?.seats?.length || 0}
+                </Text>
+                <Text style={styles.summaryValue}>
+                  {subtotal.toLocaleString()} VND
+                </Text>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Phí dịch vụ</Text>
+                <Text style={styles.summaryValue}>
+                  {serviceFee.toLocaleString()} VND
+                </Text>
+              </View>
+
+              {promoApplied && (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.totalLabel}>Tổng cộng</Text>
-                  <Text style={styles.totalValue}>
-                    {totalAmount.toLocaleString()} VND
+                  <Text style={[styles.summaryLabel, styles.discountText]}>
+                    Giảm giá
+                  </Text>
+                  <Text style={[styles.summaryValue, styles.discountText]}>
+                    -{discountAmount.toLocaleString()} VND
                   </Text>
                 </View>
+              )}
+
+              <View style={styles.divider} />
+
+              <View style={styles.summaryRow}>
+                <Text style={styles.totalLabel}>Tổng cộng</Text>
+                <Text style={styles.totalValue}>
+                  {totalAmount.toLocaleString()} VND
+                </Text>
               </View>
             </View>
           </View>
@@ -803,6 +837,12 @@ export default function Payment({ route, navigation }: PaymentProps) {
 }
 
 const styles = StyleSheet.create({
+  posterImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 8,
+  },
+
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
@@ -894,6 +934,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
+    overflow: "hidden",
   },
   moviePosterText: {
     fontSize: 36,

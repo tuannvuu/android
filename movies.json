@@ -6,7 +6,9 @@
     "rating": 4.8,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": true
+    "isHot": true,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Hành động, Viễn tưởng"
   },
   "2": {
     "id": "2",
@@ -15,7 +17,9 @@
     "rating": 4.6,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": true
+    "isHot": true,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Kinh dị"
   },
   "3": {
     "id": "3",
@@ -24,7 +28,9 @@
     "rating": 4.5,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Hoạt hình"
   },
   "4": {
     "id": "4",
@@ -33,7 +39,9 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Viễn tưởng"
   },
   "5": {
     "id": "5",
@@ -42,9 +50,10 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Hành động"
   },
-
   "6": {
     "id": "6",
     "title": "NGƯỜI NHỆN: VŨ TRỤ MỚI",
@@ -52,7 +61,9 @@
     "rating": 4.7,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": true
+    "isHot": true,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Hoạt hình, Hành động"
   },
   "7": {
     "id": "7",
@@ -61,7 +72,9 @@
     "rating": 4.4,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Hành động"
   },
   "8": {
     "id": "8",
@@ -70,7 +83,9 @@
     "rating": 4.9,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": true
+    "isHot": true,
+    "cinemaId": "Rạp CGV Vincom",
+    "genre": "Hành động"
   },
   "9": {
     "id": "9",
@@ -79,7 +94,9 @@
     "rating": 4.3,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Kinh dị"
   },
   "10": {
     "id": "10",
@@ -88,7 +105,9 @@
     "rating": 4.2,
     "status": "nowPlaying",
     "year": 2024,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Phiêu lưu"
   },
   "11": {
     "id": "11",
@@ -97,7 +116,9 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Hành động"
   },
   "12": {
     "id": "12",
@@ -106,7 +127,9 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": true
+    "isHot": true,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Viễn tưởng"
   },
   "13": {
     "id": "13",
@@ -115,7 +138,9 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp CGV Vincom",
+    "genre": "Tình cảm"
   },
   "14": {
     "id": "14",
@@ -124,7 +149,9 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": false
+    "isHot": false,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Phiêu lưu"
   },
   "15": {
     "id": "15",
@@ -133,9 +160,8 @@
     "rating": 0,
     "status": "comingSoon",
     "year": 2025,
-    "isHot": true
+    "isHot": true,
+    "cinemaId": "Rạp IMAX LiDoRa",
+    "genre": "Tâm lý"
   }
 }
-
-  
-

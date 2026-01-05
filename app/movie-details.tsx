@@ -340,9 +340,8 @@ export default function MovieDetails() {
                 router.push({
                   pathname: "/cinema-movies",
                   params: {
-                    id: movie.id,
+                    movieId: movie.id, // ✅ ID thật
                     title: movie.title,
-                    price: 75000,
                   },
                 });
               }}

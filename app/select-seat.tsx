@@ -1,8 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Dimensions,
   Platform,
   SafeAreaView,
@@ -13,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { auth, db } from "../config/firebase";
 
 const { width } = Dimensions.get("window");
 
@@ -27,15 +31,65 @@ const SEATS_PER_ROW = 10;
 const ROWS = ["A", "B", "C"];
 
 export default function SelectSeatScreen() {
-  const { time } = useLocalSearchParams();
+  const { movieId, showtimeId, cinemaId } = useLocalSearchParams<{
+    movieId: string;
+    showtimeId: string;
+    cinemaId: string;
+  }>();
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 2. Tính tổng tiền dựa trên hàng ghế
   const totalPrice = useMemo(() => {
     return selectedSeats.reduce((total, seat) => {
       const row = seat[0];
-      return total + (SEAT_PRICES[row as keyof typeof SEAT_PRICES] || 0);
+      // SEAT_PRICES cần được định nghĩa ở ngoài hoặc trong component này
+      const price = row === "C" ? 85000 : 75000;
+      return total + price;
     }, 0);
   }, [selectedSeats]);
+
+  // 3. Hàm xử lý logic đặt vé
+  const handleContinue = async () => {
+    if (selectedSeats.length === 0) {
+      Alert.alert("Thông báo", "Vui lòng chọn ít nhất một ghế");
+      return;
+    }
+
+    // ❗ CHẶN NGAY NẾU THIẾU ID
+    if (!movieId || !showtimeId || !cinemaId) {
+      Alert.alert(
+        "Lỗi",
+        "Thiếu thông tin phim hoặc suất chiếu. Vui lòng chọn lại."
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const bookingRef = await addDoc(collection(db, "bookings"), {
+        movieId: movieId, // ✅ ID thật movies
+        showtimeId: showtimeId, // ✅ ID thật showtimes
+        cinemaId: cinemaId, // ✅ ID thật cinemas
+
+        seats: selectedSeats,
+        totalPrice: totalPrice,
+        status: "PENDING",
+        userId: auth.currentUser?.uid || "guest",
+        createdAt: serverTimestamp(),
+      });
+
+      router.push({
+        pathname: "/payment",
+        params: { bookingId: bookingRef.id },
+      });
+    } catch (error) {
+      console.error("Lỗi tạo booking:", error);
+      Alert.alert("Lỗi", "Không thể khởi tạo đơn hàng. Vui lòng thử lại.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const toggleSeat = (seatId: string) => {
     setSelectedSeats((prev) =>
@@ -48,6 +102,8 @@ export default function SelectSeatScreen() {
   const renderSeat = (row: string, seatNum: number) => {
     const seatId = `${row}${seatNum}`;
     const isSelected = selectedSeats.includes(seatId);
+    const isPremium = row === "C";
+
     return (
       <TouchableOpacity
         key={seatId}
@@ -55,9 +111,10 @@ export default function SelectSeatScreen() {
         style={[
           styles.seat,
           isSelected && styles.selectedSeat,
-          row === "C" && styles.premiumSeat,
+          isPremium && styles.premiumSeat,
         ]}
         activeOpacity={0.7}
+        disabled={isSubmitting} // Khóa ghế khi đang xử lý
       >
         {isSelected ? (
           <Ionicons name="checkmark" size={14} color="#FFF" />
@@ -66,7 +123,7 @@ export default function SelectSeatScreen() {
             style={[
               styles.seatNumber,
               isSelected && styles.selectedSeatNumber,
-              row === "C" && styles.premiumSeatNumber,
+              isPremium && styles.premiumSeatNumber,
             ]}
           >
             {seatNum}
@@ -125,7 +182,7 @@ export default function SelectSeatScreen() {
         </TouchableOpacity>
 
         <View style={styles.timeContainer}>
-          <Text style={styles.timeText}>{time}</Text>
+          <Text>Showtime: {showtimeId}</Text>
           <Text style={styles.formatText}>• 2D Phụ đề</Text>
         </View>
 
@@ -187,18 +244,13 @@ export default function SelectSeatScreen() {
           <TouchableOpacity
             style={[
               styles.continueButton,
-              selectedSeats.length === 0 && styles.disabledButton,
+              // Vô hiệu hóa nút nếu chưa chọn ghế hoặc đang xử lý gửi dữ liệu
+              (selectedSeats.length === 0 || isSubmitting) &&
+                styles.disabledButton,
             ]}
-            disabled={selectedSeats.length === 0}
-            onPress={() => {
-              router.push({
-                pathname: "/payment",
-                params: {
-                  seats: selectedSeats.join(","),
-                  total: totalPrice,
-                },
-              });
-            }}
+            disabled={selectedSeats.length === 0 || isSubmitting}
+            // ✅ THAY ĐỔI TẠI ĐÂY: Gọi hàm handleContinue để lưu vào Firestore
+            onPress={handleContinue}
             activeOpacity={0.8}
           >
             <LinearGradient
@@ -211,8 +263,15 @@ export default function SelectSeatScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <Text style={styles.continueText}>TIẾP TỤC</Text>
-              <Ionicons name="arrow-forward" size={20} color="#FFF" />
+              {/* ✅ HIỂN THỊ LOADING: Nếu đang xử lý thì hiện vòng xoay, không thì hiện chữ */}
+              {isSubmitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Text style={styles.continueText}>TIẾP TỤC</Text>
+                  <Ionicons name="arrow-forward" size={20} color="#FFF" />
+                </>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>

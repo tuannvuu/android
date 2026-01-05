@@ -10,6 +10,7 @@ import {
 import { getFirestore } from "firebase/firestore";
 import { Platform } from 'react-native';
 
+
 const firebaseConfig = {
   apiKey: "AIzaSyDICFea2S38RMJmqZiKsTIXlg4xTkNEewM",
   authDomain: "lidora-b6d61.firebaseapp.com",

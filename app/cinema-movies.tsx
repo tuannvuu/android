@@ -2,7 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../config/firebase"; // Đảm bảo đường dẫn đúng
 
 import React, { useEffect, useState } from "react";
@@ -34,13 +40,17 @@ interface Movie {
   cinemaId: string;
 }
 
-interface Showtime {
+export interface Showtime {
   id: string;
+  movieId: string; // ✅ BẮT BUỘC
+  cinemaId: string; // ✅ BẮT BUỘC
+  date: string;
   time: string;
-  theater: string;
   format: string;
+  room: string;
   price: number;
-  seats: string[];
+  totalSeats: number;
+  availableSeats: number;
 }
 
 export default function CinemaMovies() {
@@ -54,7 +64,9 @@ export default function CinemaMovies() {
   const [selectedFormat, setSelectedFormat] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [allGenres] = useState<string[]>([]);
-  const { cinemaId } = useLocalSearchParams<{ cinemaId: string }>();
+  const { cinemaId } = useLocalSearchParams<{
+    cinemaId?: string;
+  }>();
 
   // Ngày chiếu mẫu
   const dates = [
@@ -75,109 +87,73 @@ export default function CinemaMovies() {
   ];
 
   useEffect(() => {
-    if (!cinemaId) {
-      console.log("Đang đợi cinemaId...");
-      return;
-    }
-    setLoading(true);
-
-    // ✅ Cách làm đúng với Firestore
-    // Giả sử bạn tìm phim theo cinemaId
-    const moviesRef = collection(db, "movies");
-    const q = query(moviesRef, where("cinemaId", "==", cinemaId));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const moviesData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        // 1. Luôn lấy tất cả 15 bộ phim để hiển thị (Dữ liệu thật từ Firestore)
+        const moviesSnap = await getDocs(collection(db, "movies"));
+        const allMovies = moviesSnap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         })) as Movie[];
-        setMovies(moviesData);
-        if (moviesData.length > 0) {
-          generateMockShowtimes(moviesData);
-        }
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Lỗi lấy danh sách phim tại rạp:", error);
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, [cinemaId]);
+        setMovies(allMovies);
 
-  const generateMockShowtimes = (movies: Movie[]) => {
-    const showtimesData: Record<string, Showtime[]> = {};
-    const theaters = ["Rạp 1", "Rạp 2", "Rạp 3", "Rạp VIP"];
-    const timeSlots = ["09:00", "11:30", "14:00", "16:30", "19:00", "21:30"];
-    const formatsList = ["2D", "3D", "IMAX", "4DX"];
+        // 2. Nếu có cinemaId (từ trang rạp qua), lấy suất chiếu của rạp đó
+        // 3. Nếu KHÔNG có cinemaId (từ trang phim qua), lấy toàn bộ suất chiếu để khách chọn rạp
+        const showtimesRef = collection(db, "showtimes");
+        const q = cinemaId
+          ? query(showtimesRef, where("cinemaId", "==", cinemaId))
+          : showtimesRef; // Lấy tất cả nếu không có rạp cụ thể
 
-    movies.forEach((movie) => {
-      const movieShowtimes: Showtime[] = [];
-      const showtimeCount = Math.floor(Math.random() * 4) + 3; // 3-6 suất chiếu
-
-      for (let i = 0; i < showtimeCount; i++) {
-        const randomFormat =
-          formatsList[Math.floor(Math.random() * formatsList.length)];
-        const randomTime =
-          timeSlots[Math.floor(Math.random() * timeSlots.length)];
-        const randomTheater =
-          theaters[Math.floor(Math.random() * theaters.length)];
-        const basePrice =
-          randomFormat === "2D"
-            ? 75000
-            : randomFormat === "3D"
-            ? 95000
-            : randomFormat === "IMAX"
-            ? 120000
-            : 150000;
-
-        movieShowtimes.push({
-          id: `${movie.id}_${i}`,
-          time: randomTime,
-          format: randomFormat,
-          theater: randomTheater,
-          price: basePrice,
-          seats: Array.from(
-            { length: Math.floor(Math.random() * 20) + 10 },
-            (_, i) => `S${i + 1}`
-          ),
+        const unsubscribe = onSnapshot(q, (snap) => {
+          const showtimesMap: Record<string, Showtime[]> = {};
+          snap.docs.forEach((d) => {
+            const st = d.data() as Showtime;
+            if (!showtimesMap[st.movieId]) showtimesMap[st.movieId] = [];
+            showtimesMap[st.movieId].push({ ...st, id: d.id });
+          });
+          setShowtimes(showtimesMap);
+          setLoading(false);
         });
+
+        return () => unsubscribe();
+      } catch (error) {
+        console.error("Lỗi tải dữ liệu:", error);
+        setLoading(false);
       }
+    };
 
-      // Sắp xếp theo thời gian
-      movieShowtimes.sort((a, b) => a.time.localeCompare(b.time));
-      showtimesData[movie.id] = movieShowtimes;
-    });
-
-    setShowtimes(showtimesData);
-  };
+    loadInitialData();
+  }, [cinemaId]);
 
   // Filter và sort movies
   useEffect(() => {
     let result = [...movies];
 
-    // Apply search filter
-    if (searchQuery) {
+    // 🔍 Tìm theo tên phim
+    if (searchQuery.trim()) {
       result = result.filter((movie) =>
-        movie.title.toLowerCase().includes(searchQuery.toLowerCase())
+        movie.title?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    // Apply genre filter
+    // 🎭 Lọc theo thể loại
     if (selectedGenres.length > 0) {
       result = result.filter((movie) =>
-        selectedGenres.some((genre) => movie.genre?.includes(genre))
+        selectedGenres.some((genre) =>
+          movie.genre?.toLowerCase().includes(genre.toLowerCase())
+        )
       );
     }
 
-    // Apply format filter
+    // 🎬 Lọc theo định dạng (2D / 3D / IMAX / 4DX)
     if (selectedFormat !== "all") {
       result = result.filter((movie) => {
-        const movieShowtimes = showtimes[movie.id] || [];
-        return movieShowtimes.some(
-          (st) => st.format.toLowerCase() === selectedFormat.toLowerCase()
+        const sts = showtimes?.[movie.id];
+        if (!sts || sts.length === 0) return false;
+
+        return sts.some(
+          (st) => st.format?.toLowerCase() === selectedFormat.toLowerCase()
         );
       });
     }
@@ -205,12 +181,23 @@ export default function CinemaMovies() {
     });
   };
 
-  const navigateToSeatSelection = (movieId: string, showtimeId: string) => {
+  const navigateToSeatSelection = (
+    movieId: string,
+    showtimeId: string,
+    cId: string
+  ) => {
+    // ✅ Kiểm tra dữ liệu trước khi đi tiếp để tránh lỗi "unknown"
+    console.log("🎟️ Đang chuyển sang chọn ghế:");
+    console.log("- Phim ID:", movieId);
+    console.log("- Suất chiếu ID:", showtimeId);
+    console.log("- Rạp ID:", cId || cinemaId);
+
     router.push({
       pathname: "/select-seat",
       params: {
-        movieId,
-        showtimeId,
+        cinemaId: cId || cinemaId, // Ưu tiên ID từ suất chiếu hoặc từ URL
+        movieId: movieId, // Đảm bảo là "1", "2"... thay vì undefined
+        showtimeId: showtimeId, // Đảm bảo là "st1", "st2"...
       },
     });
   };
@@ -219,7 +206,18 @@ export default function CinemaMovies() {
     <TouchableOpacity
       key={showtime.id}
       style={styles.showtimeButton}
-      onPress={() => navigateToSeatSelection(movieId, showtime.id)}
+      onPress={() => {
+        // ✅ SỬA: Lấy cinemaId trực tiếp từ showtime thay vì dùng biến bên ngoài
+        // Điều này đảm bảo khi chuyển trang sẽ mang theo đúng ID rạp (ví dụ: "1" hoặc "2")
+        const targetCinemaId = showtime.cinemaId || cinemaId;
+
+        if (!targetCinemaId || !movieId) {
+          console.error("Thiếu dữ liệu: cinemaId hoặc movieId bị trống!");
+          return;
+        }
+
+        navigateToSeatSelection(movieId, showtime.id, targetCinemaId);
+      }}
       activeOpacity={0.7}
     >
       <View style={styles.showtimeTop}>
@@ -235,14 +233,16 @@ export default function CinemaMovies() {
           <Text style={styles.formatText}>{showtime.format}</Text>
         </View>
       </View>
-      <Text style={styles.showtimeTheater}>{showtime.theater}</Text>
+
       <View style={styles.showtimeBottom}>
         <Text style={styles.showtimePrice}>
           {showtime.price.toLocaleString()}₫
         </Text>
         <View style={styles.seatsAvailable}>
           <Ionicons name="person-outline" size={12} color="#4CAF50" />
-          <Text style={styles.seatsText}>{showtime.seats} ghế</Text>
+          <Text style={styles.seatsText}>
+            {showtime.availableSeats} ghế trống
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
