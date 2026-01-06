@@ -1,8 +1,18 @@
-import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { PhoneAuthProvider, signInWithCredential } from "firebase/auth";
+import {
+  ArrowLeft,
+  Mail,
+  RotateCw,
+  Shield,
+  Smartphone,
+} from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
+  KeyboardAvoidingView,
   NativeSyntheticEvent,
   Platform,
   ScrollView,
@@ -13,20 +23,22 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { auth } from "../config/firebase";
 
-// Sửa cảnh báo ESLint: Sử dụng cú pháp mảng T[]
 type InputRefsArray = (TextInput | null)[];
+
+const { width } = Dimensions.get("window");
 
 export default function VerifyOTPScreen() {
   const inputRefs = useRef<InputRefsArray>([]);
-
   const router = useRouter();
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const [isResendEnabled, setIsResendEnabled] = useState(false);
+  const [resetMethod, setResetMethod] = useState("phone"); // 'phone' hoặc 'email'
 
-  // Hàm xử lý khi người dùng nhập OTP
+  // Xử lý khi người dùng nhập OTP
   const handleOtpChange = (text: string, index: number) => {
     if (text.length > 1 || !/^\d*$/.test(text)) return;
 
@@ -34,7 +46,7 @@ export default function VerifyOTPScreen() {
     newOtp[index] = text;
     setOtp(newOtp);
 
-    // Tự động focus đến ô tiếp theo khi nhập xong
+    // Tự động focus đến ô tiếp theo
     if (text && index < 5) {
       const nextInput = inputRefs.current[index + 1];
       if (nextInput) {
@@ -42,7 +54,7 @@ export default function VerifyOTPScreen() {
       }
     }
 
-    // Tự động xử lý verify khi nhập đủ 6 số
+    // Tự động xác thực khi nhập đủ 6 số
     if (index === 5 && text) {
       const otpCode = newOtp.join("");
       if (otpCode.length === 6) {
@@ -51,7 +63,7 @@ export default function VerifyOTPScreen() {
     }
   };
 
-  // Hàm xử lý xóa ký tự
+  // Xử lý xóa ký tự
   const handleKeyPress = (
     e: NativeSyntheticEvent<TextInputKeyPressEventData>,
     index: number
@@ -63,59 +75,80 @@ export default function VerifyOTPScreen() {
       }
     }
   };
+  // ... trong component VerifyOTPScreen ...
 
-  // Hàm xác thực OTP
+  // Lấy verificationId được truyền từ trang trước (trang nhập số điện thoại)
+  const { verificationId } = useLocalSearchParams<{ verificationId: string }>();
+
   const handleVerifyOTP = async (otpCode: string | null = null) => {
     const code = otpCode !== null ? otpCode : otp.join("");
 
+    // Kiểm tra đầu vào
     if (code.length !== 6) {
       Alert.alert("Lỗi", "Vui lòng nhập đủ 6 số OTP");
       return;
     }
 
+    // Kiểm tra nếu không có mã xác thực từ trang trước truyền sang
+    if (!verificationId) {
+      Alert.alert("Lỗi", "Phiên làm việc đã hết hạn. Vui lòng gửi lại mã OTP.");
+      return;
+    }
+
     setLoading(true);
-    console.log("Verifying OTP:", code);
 
-    // Giả lập gửi OTP lên server
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // ✅ BƯỚC 1: Tạo "Credential" từ mã OTP người dùng nhập và ID xác thực
+      const credential = PhoneAuthProvider.credential(verificationId, code);
 
-      if (code === "123456") {
-        Alert.alert("Thành công", "Xác thực OTP thành công!", [
+      // ✅ BƯỚC 2: Tiến hành đăng nhập thật vào Firebase
+      const userCredential = await signInWithCredential(auth, credential);
+
+      if (userCredential.user) {
+        setLoading(false);
+        Alert.alert("🎉 Thành công!", "Xác thực OTP thành công!", [
           {
-            text: "OK",
-            // ✨ ĐIỀU CHỈNH LỚN: CHUYỂN HƯỚNG VỀ TRANG LOGIN
-            onPress: () => router.push("/login"),
+            text: "Tiếp tục",
+            // Sau khi đăng nhập xong, chuyển người dùng vào trang chủ (tabs)
+            onPress: () => router.replace("/login"),
           },
         ]);
-      } else {
-        Alert.alert("Lỗi", "Mã OTP không đúng. Vui lòng thử lại.");
       }
-    }, 1000);
+    } catch (error: any) {
+      setLoading(false);
+      console.error("Lỗi xác thực OTP thật:", error.code);
+
+      // Xử lý các lỗi phổ biến từ Firebase
+      let message = "Có lỗi xảy ra, vui lòng thử lại.";
+      if (error.code === "auth/invalid-verification-code") {
+        message = "Mã OTP không chính xác. Vui lòng kiểm tra lại.";
+      } else if (error.code === "auth/code-expired") {
+        message = "Mã OTP đã hết hạn. Hãy bấm gửi lại mã.";
+      }
+
+      Alert.alert("❌ Lỗi", message);
+    }
   };
 
-  // Hàm gửi lại OTP
+  // Gửi lại OTP
   const handleResendOTP = () => {
     if (!isResendEnabled) return;
 
     setLoading(true);
-    console.log("Resending OTP...");
+    console.log("Đang gửi lại OTP...");
 
     // Reset timer
     setResendTimer(60);
     setIsResendEnabled(false);
 
-    // Giả lập gửi lại OTP
     setTimeout(() => {
       setLoading(false);
-      Alert.alert("Thành công", "Đã gửi lại mã OTP mới");
-
-      // Bắt đầu đếm ngược
+      Alert.alert("📨 Đã gửi", "Mã OTP mới đã được gửi đến bạn");
       startResendTimer();
     }, 1000);
   };
 
-  // Timer đếm ngược để gửi lại OTP
+  // Timer đếm ngược
   const startResendTimer = () => {
     const timer = setInterval(() => {
       setResendTimer((prev) => {
@@ -130,55 +163,110 @@ export default function VerifyOTPScreen() {
     return () => clearInterval(timer);
   };
 
-  // Khởi động timer khi component mount
   useEffect(() => {
     startResendTimer();
   }, []);
 
-  // Hàm điều hướng quay lại Login
-  const handleGoToLogin = () => {
-    router.push("/login");
+  const handleGoBack = () => {
+    router.back();
   };
 
-  // Hàm điều hướng quay lại Forgot Password
-  const handleGoToForgotPassword = () => {
-    router.push("/forgot-password");
+  // Nhập OTP thủ công
+  const handleManualEntry = () => {
+    Alert.prompt(
+      "Nhập OTP thủ công",
+      `Nhập đầy đủ 6 số OTP đã được gửi đến ${
+        resetMethod === "phone" ? "số điện thoại" : "email"
+      } của bạn:`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xác nhận",
+          onPress: (code?: string) => {
+            if (code && code.length === 6 && /^\d{6}$/.test(code)) {
+              setOtp(code.split(""));
+              handleVerifyOTP(code);
+            } else if (code && code.length !== 6) {
+              Alert.alert("Lỗi", "OTP phải có đúng 6 chữ số.");
+            }
+          },
+        },
+      ],
+      "plain-text",
+      "",
+      "numeric"
+    );
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: "#667eea" }]}>
-      <View style={styles.keyboardView}>
+    <LinearGradient
+      colors={["#667eea", "#764ba2", "#f093fb"]}
+      style={styles.container}
+    >
+      {/* Decorative Circles */}
+      <View style={styles.circle1} />
+      <View style={styles.circle2} />
+      <View style={styles.circle3} />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Back Button */}
+          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+
           {/* Header */}
           <View style={styles.header}>
-            <View
-              style={[styles.logoContainer, { backgroundColor: "#f5576c" }]}
+            <LinearGradient
+              colors={["#f093fb", "#f5576c"]}
+              style={styles.logoContainer}
             >
-              <Text style={{ fontSize: 28, color: "#FFFFFF" }}>🔐</Text>
-            </View>
+              <Shield size={28} color="#FFFFFF" />
+            </LinearGradient>
             <Text style={styles.logoText}>LiDoRa</Text>
+            <Text style={styles.tagline}>Xác thực OTP</Text>
           </View>
 
           {/* Welcome Section */}
           <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Verify OTP</Text>
+            <Text style={styles.welcomeTitle}>Xác Thực Mã OTP 🔐</Text>
             <Text style={styles.welcomeSubtitle}>
-              We have sent a 6-digit OTP code to your phone number. (Code:
-              123456)
+              Chúng tôi đã gửi mã 6 số đến{" "}
+              {resetMethod === "phone" ? "số điện thoại" : "email"} của bạn.
+              <Text style={{ fontWeight: "bold", color: "#f5576c" }}>
+                {" "}
+                (Mã demo: 123456)
+              </Text>
             </Text>
+          </View>
+
+          {/* Reset Method Indicator */}
+          <View style={styles.methodIndicator}>
+            <View style={styles.methodIndicatorItem}>
+              {resetMethod === "phone" ? (
+                <Smartphone size={16} color="#FFFFFF" />
+              ) : (
+                <Mail size={16} color="#FFFFFF" />
+              )}
+              <Text style={styles.methodIndicatorText}>
+                Nhận mã qua {resetMethod === "phone" ? "SMS" : "Email"}
+              </Text>
+            </View>
           </View>
 
           {/* Form Card */}
           <View style={styles.formCard}>
             {/* OTP Input Fields */}
             <View style={styles.otpContainer}>
-              <Text style={styles.otpLabel}>Enter OTP Code</Text>
+              <Text style={styles.otpLabel}>Nhập mã OTP 6 số</Text>
 
               <View style={styles.otpInputsContainer}>
-                {/* Render 6 ô TextInput */}
                 {[0, 1, 2, 3, 4, 5].map((index) => (
                   <TextInput
                     key={index}
@@ -196,21 +284,32 @@ export default function VerifyOTPScreen() {
                     maxLength={1}
                     editable={!loading}
                     selectTextOnFocus
+                    textAlign="center"
                   />
                 ))}
               </View>
+
+              {/* OTP Hint */}
+              <Text style={styles.otpHint}>
+                ⏱️ Mã OTP có hiệu lực trong 5 phút
+              </Text>
             </View>
 
             {/* Resend OTP Section */}
             <View style={styles.resendContainer}>
               <Text style={styles.resendText}>
                 {isResendEnabled
-                  ? "Didn't receive code? "
-                  : `Resend code in ${resendTimer}s`}
+                  ? "Không nhận được mã? "
+                  : `Gửi lại mã sau ${resendTimer} giây`}
               </Text>
               {isResendEnabled && (
-                <TouchableOpacity onPress={handleResendOTP} disabled={loading}>
-                  <Text style={styles.resendLink}>Resend OTP</Text>
+                <TouchableOpacity
+                  style={styles.resendButton}
+                  onPress={handleResendOTP}
+                  disabled={loading}
+                >
+                  <RotateCw size={16} color="#f5576c" />
+                  <Text style={styles.resendLink}> Gửi lại mã</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -219,176 +318,278 @@ export default function VerifyOTPScreen() {
             <TouchableOpacity
               style={[
                 styles.verifyButton,
-                { backgroundColor: "#f5576c" },
                 loading && styles.verifyButtonDisabled,
               ]}
               onPress={() => handleVerifyOTP()}
-              disabled={loading}
+              disabled={loading || otp.join("").length !== 6}
               activeOpacity={0.8}
             >
-              <View style={styles.gradientButton}>
+              <LinearGradient
+                colors={
+                  otp.join("").length === 6
+                    ? ["#f093fb", "#f5576c"]
+                    : ["#ccc", "#999"]
+                }
+                style={styles.gradientButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
                 <Text style={styles.verifyButtonText}>
-                  {loading ? "⏳ Verifying..." : "Verify OTP"}
+                  {loading ? "⏳ Đang xác thực..." : "XÁC THỰC OTP"}
                 </Text>
-              </View>
+              </LinearGradient>
             </TouchableOpacity>
 
-            {/* Manual Entry Option */}
-            <TouchableOpacity
-              style={styles.manualEntryContainer}
-              onPress={() => {
-                Alert.prompt(
-                  "Nhập OTP",
-                  "Vui lòng nhập đầy đủ 6 số OTP:",
-                  [
-                    { text: "Hủy", style: "cancel" },
-                    {
-                      text: "Xác nhận",
-                      onPress: (code?: string) => {
-                        if (code && code.length === 6 && /^\d*$/.test(code)) {
-                          setOtp(code.split(""));
-                          handleVerifyOTP(code);
-                        } else if (code && code.length !== 6) {
-                          Alert.alert("Lỗi", "OTP phải có 6 chữ số.");
-                        }
-                      },
-                    },
-                  ],
-                  "plain-text",
-                  "",
-                  Platform.OS === "ios" ? "numeric" : undefined
-                );
-              }}
-            ></TouchableOpacity>
+            {/* Alternative Options */}
+            <View style={styles.alternativeOptions}>
+              <TouchableOpacity
+                style={styles.alternativeButton}
+                onPress={handleManualEntry}
+              >
+                <Text style={styles.alternativeButtonText}>
+                  📝 Nhập OTP thủ công
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.alternativeButton}
+                onPress={() => {
+                  setResetMethod(resetMethod === "phone" ? "email" : "phone");
+                  Alert.alert(
+                    "Thay đổi phương thức",
+                    `Đã chuyển sang nhận mã qua ${
+                      resetMethod === "phone" ? "email" : "SMS"
+                    }`
+                  );
+                }}
+              >
+                <Text style={styles.alternativeButtonText}>
+                  🔄 Đổi phương thức nhận mã
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Demo Instructions */}
+            <View style={styles.demoContainer}>
+              <Text style={styles.demoTitle}>💡 Hướng dẫn demo:</Text>
+              <Text style={styles.demoText}>
+                • Nhập <Text style={styles.demoCode}>123456</Text> để xác thực
+                thành công
+              </Text>
+              <Text style={styles.demoText}>
+                • Nhập <Text style={styles.demoCode}>000000</Text> để xem thông
+                báo lỗi
+              </Text>
+              <Text style={styles.demoText}>
+                • Mã khác sẽ hiển thị lỗi xác thực
+              </Text>
+            </View>
           </View>
 
-          {/* Back Link Section */}
-          <View style={styles.backContainer}>
-            <Text style={styles.backText}>
-              {`Want to `}
-              {/* Link Forgot Password */}
-              <TouchableOpacity onPress={handleGoToForgotPassword}>
-                <Text style={styles.backLink}>Go Back to Forgot Password</Text>
+          {/* Need Help Section */}
+          <View style={styles.helpContainer}>
+            <Text style={styles.helpText}>
+              Cần hỗ trợ?{" "}
+              <TouchableOpacity
+                onPress={() =>
+                  Alert.alert("Hỗ trợ", "Liên hệ hotline: 1900 1234")
+                }
+              >
+                <Text style={styles.helpLink}>Liên hệ ngay</Text>
               </TouchableOpacity>
-              {/* Dấu phân cách và Link Login */}
-              <Text style={styles.backText}>{" or "}</Text>
-              <TouchableOpacity onPress={handleGoToLogin}>
-                <Text style={styles.backLink}>Login</Text>
-              </TouchableOpacity>
-              <Text style={styles.backText}>?</Text>
             </Text>
           </View>
         </ScrollView>
-      </View>
-    </View>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 50,
-    justifyContent: "center",
   },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 25,
-    paddingBottom: 50,
-    justifyContent: "center",
-    minHeight: Dimensions.get("window").height,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
-  // Header styles
+  // Decorative Circles
+  circle1: {
+    position: "absolute",
+    width: width * 0.7,
+    height: width * 0.7,
+    borderRadius: width * 0.35,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    top: -width * 0.2,
+    left: -width * 0.15,
+  },
+  circle2: {
+    position: "absolute",
+    width: width * 0.5,
+    height: width * 0.5,
+    borderRadius: width * 0.25,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    top: width * 0.4,
+    right: -width * 0.1,
+  },
+  circle3: {
+    position: "absolute",
+    width: width * 0.6,
+    height: width * 0.6,
+    borderRadius: width * 0.3,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    bottom: -width * 0.2,
+    left: -width * 0.1,
+  },
+  // Back Button
+  backButton: {
+    position: "absolute",
+    top: 50,
+    left: 24,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Header
   header: {
     alignItems: "center",
-    marginBottom: 50,
-    marginTop: 50,
+    paddingTop: 100,
+    paddingBottom: 30,
   },
   logoContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 80,
+    height: 80,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
-    shadowColor: "#f5576c",
+    marginBottom: 16,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 5,
+    shadowRadius: 8,
     elevation: 8,
   },
   logoText: {
-    fontSize: 32,
-    fontWeight: "700",
+    fontSize: 36,
+    fontWeight: "800",
     color: "#FFFFFF",
-    textShadowColor: "rgba(0, 0, 0, 0.1)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    letterSpacing: 1,
   },
-  // Welcome styles
+  tagline: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.9)",
+    marginTop: 8,
+    letterSpacing: 1,
+  },
+  // Welcome Section
   welcomeSection: {
-    marginBottom: 40,
+    alignItems: "center",
+    marginBottom: 25,
   },
   welcomeTitle: {
     fontSize: 28,
     fontWeight: "700",
     color: "#FFFFFF",
-    textAlign: "center",
+    marginBottom: 12,
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   welcomeSubtitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "rgba(255, 255, 255, 0.9)",
     textAlign: "center",
-    marginTop: 10,
-    paddingHorizontal: 15,
     lineHeight: 22,
+    paddingHorizontal: 20,
   },
-  // Form Card styles
-  formCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 25,
-    padding: 25,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  // OTP styles
-  otpContainer: {
+  // Method Indicator
+  methodIndicator: {
+    flexDirection: "row",
+    justifyContent: "center",
     marginBottom: 25,
   },
+  methodIndicatorItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  methodIndicatorText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    marginLeft: 8,
+    fontWeight: "500",
+  },
+  // Form Card
+  formCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderRadius: 30,
+    padding: 28,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  // OTP Container
+  otpContainer: {
+    marginBottom: 25,
+    alignItems: "center",
+  },
   otpLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     color: "#764ba2",
-    marginBottom: 15,
+    marginBottom: 20,
     textAlign: "center",
   },
   otpInputsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginHorizontal: 10,
+    width: "100%",
+    marginBottom: 15,
   },
   otpInput: {
-    width: 45,
-    height: 55,
-    backgroundColor: "#f9f5ff",
-    borderRadius: 12,
+    width: 50,
+    height: 60,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderRadius: 16,
     textAlign: "center",
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "600",
-    color: "#4c1d95",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    color: "#333",
+    borderWidth: 2,
+    borderColor: "rgba(118, 75, 162, 0.2)",
   },
   otpInputFilled: {
     borderColor: "#f5576c",
     backgroundColor: "#fff5f7",
+    shadowColor: "#f5576c",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  // Resend styles
+  otpHint: {
+    fontSize: 14,
+    color: "#764ba2",
+    textAlign: "center",
+    marginTop: 10,
+  },
+  // Resend Container
   resendContainer: {
     flexDirection: "row",
     justifyContent: "center",
@@ -396,30 +597,36 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   resendText: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#666",
-    marginRight: 5,
+  },
+  resendButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 8,
   },
   resendLink: {
-    fontSize: 14,
-    fontWeight: "bold",
+    fontSize: 15,
+    fontWeight: "600",
     color: "#f5576c",
     textDecorationLine: "underline",
   },
-  // Verify Button styles
+  // Verify Button
   verifyButton: {
-    width: "100%",
-    borderRadius: 15,
-    marginBottom: 15,
-    height: 55,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 20,
+    shadowColor: "#f5576c",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   verifyButtonDisabled: {
     opacity: 0.6,
   },
   gradientButton: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 15,
+    height: 60,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -428,32 +635,69 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
-  // Manual Entry
-  manualEntryContainer: {
-    alignItems: "center",
-    paddingVertical: 10,
-    marginBottom: 10,
+  // Alternative Options
+  alternativeOptions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
   },
-  manualEntryText: {
+  alternativeButton: {
+    flex: 1,
+    backgroundColor: "rgba(118, 75, 162, 0.1)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: "rgba(118, 75, 162, 0.2)",
+  },
+  alternativeButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#764ba2",
+    textAlign: "center",
+  },
+  // Demo Container
+  demoContainer: {
+    backgroundColor: "rgba(118, 75, 162, 0.08)",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 10,
+  },
+  demoTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#764ba2",
+    marginBottom: 8,
+  },
+  demoText: {
     fontSize: 14,
     color: "#764ba2",
-    textDecorationLine: "underline",
+    marginBottom: 6,
+    lineHeight: 20,
   },
-  // Back Link styles
-  backContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 30,
-    flexWrap: "wrap", // Cho phép xuống dòng nếu màn hình nhỏ
-  },
-  backText: {
-    fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
-  },
-  backLink: {
-    fontSize: 16,
+  demoCode: {
     fontWeight: "bold",
-    color: "#f093fb",
+    color: "#f5576c",
+  },
+  // Help Container
+  helpContainer: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  helpText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  helpLink: {
+    color: "#00f2fe",
+    fontWeight: "700",
     textDecorationLine: "underline",
   },
 });

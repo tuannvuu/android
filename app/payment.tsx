@@ -359,41 +359,54 @@ export default function Payment({ route, navigation }: PaymentProps) {
 
       if (!bookingData) throw new Error("Dữ liệu booking trống");
 
-      // 1. Tạo ID đơn hàng tự tăng (bk1, bk2...)
+      // 1️⃣ Đếm chính xác số lượng đơn hàng để tạo mã bk tiếp theo
       const bookingsSnap = await getDocs(collection(db, "bookings"));
-      const nextId = `bk${bookingsSnap.size + 1}`;
+      const nextId = `bk${bookingsSnap.size + 1}`; // Tạo mã đẹp bk1, bk2...
 
-      // 2. Chụp ảnh dữ liệu thật để lưu vào đơn hàng
+      // 2️⃣ Ép kiểu dữ liệu "Thật" để không bao giờ bị "unknown"
+      // Ưu tiên lấy ID từ movieData (dữ liệu đã load từ Firestore)
+      const finalMovieId = movieData?.id || bookingData.movieId;
+
+      if (!finalMovieId || finalMovieId === "unknown") {
+        throw new Error("Không thể xác định ID phim để lưu đơn hàng");
+      }
+
+      // 3️⃣ Chụp ảnh dữ liệu (Snapshot) để lưu vào đơn hàng
       const fullBookingData = {
         ...bookingData,
-        movieId: movieData?.id || "1", // Gán ID thật thay vì "unknown"
+        movieId: finalMovieId, // ✅ Sửa: Luôn lưu ID thật (1, 2, 10...)
         movieTitle: movieData?.title || "Phim không xác định",
-        //moviePoster: movieData?.poster || "",
+        moviePoster: movieData?.posterUrl || "", // Lưu poster để trang vé hiện ngay
         cinemaName: cinemaData?.name || "Rạp không xác định",
         totalPrice: totalAmount,
         status: "PAID",
-        bookingId: nextId,
+        bookingId: nextId, // Mã định danh bkX
         updatedAt: serverTimestamp(),
         paymentMethod: selectedPaymentMethod,
       };
 
-      // 3. Ghi dữ liệu vào Firestore với ID bkX
+      // 4️⃣ Ghi dữ liệu vào Firestore với ID là bk1, bk2...
+      // Dùng setDoc để thay thế mã ngẫu nhiên Io7K... bằng mã bkX
       await setDoc(doc(db, "bookings", nextId), fullBookingData);
 
-      // 4. Thông báo thành công
+      // 5️⃣ Thông báo thành công
       Alert.alert(
         "Thành công",
         `Thanh toán thành công! Mã đơn của bạn là: ${nextId}`,
         [
           {
             text: "OK",
-            onPress: () => router.replace("/"), // Quay về trang chủ
+            onPress: () => router.replace("/(tab)"), // Quay về trang chủ
           },
         ]
       );
-    } catch (error) {
+    } catch (error: any) {
+      // Cách nhanh nhất là thêm : any
       console.error("Lỗi thanh toán:", error);
-      Alert.alert("Lỗi", "Thanh toán thất bại. Vui lòng thử lại.");
+      Alert.alert(
+        "Lỗi",
+        "Thanh toán thất bại: " + (error?.message || "Lỗi không xác định")
+      );
     } finally {
       setProcessingPayment(false);
     }

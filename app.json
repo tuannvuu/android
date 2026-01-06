@@ -9,9 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
-    },
+  "supportsTablet": true,
+  "bundleIdentifier": "com.vuviet.myapp", 
+  "googleServicesFile": "./GoogleService-Info.plist"
+},
     "android": {
+      "package": "com.vuviet.myapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

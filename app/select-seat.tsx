@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDocs,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -56,36 +62,38 @@ export default function SelectSeatScreen() {
       return;
     }
 
-    // ❗ CHẶN NGAY NẾU THIẾU ID
     if (!movieId || !showtimeId || !cinemaId) {
-      Alert.alert(
-        "Lỗi",
-        "Thiếu thông tin phim hoặc suất chiếu. Vui lòng chọn lại."
-      );
+      Alert.alert("Lỗi", "Thiếu thông tin. Vui lòng chọn lại.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const bookingRef = await addDoc(collection(db, "bookings"), {
-        movieId: movieId, // ✅ ID thật movies
-        showtimeId: showtimeId, // ✅ ID thật showtimes
-        cinemaId: cinemaId, // ✅ ID thật cinemas
+      // 1️⃣ Lấy số lượng đơn hàng hiện có để tạo mã bk tiếp theo
+      const snapshot = await getDocs(collection(db, "bookings"));
+      const newBookingId = `bk${snapshot.size + 1}`; // Tạo bk1, bk2...
 
+      // 2️⃣ Dùng setDoc để ép ID tài liệu là bk1, bk2...
+      await setDoc(doc(db, "bookings", newBookingId), {
+        movieId: String(movieId), // ✅ Đảm bảo movieId là string thật
+        showtimeId: showtimeId,
+        cinemaId: cinemaId,
         seats: selectedSeats,
         totalPrice: totalPrice,
         status: "PENDING",
         userId: auth.currentUser?.uid || "guest",
         createdAt: serverTimestamp(),
+        bookingId: newBookingId, // Lưu ID vào field để đối chiếu
       });
 
+      // 3️⃣ Chuyển sang Payment với ID đẹp
       router.push({
         pathname: "/payment",
-        params: { bookingId: bookingRef.id },
+        params: { bookingId: newBookingId },
       });
     } catch (error) {
       console.error("Lỗi tạo booking:", error);
-      Alert.alert("Lỗi", "Không thể khởi tạo đơn hàng. Vui lòng thử lại.");
+      Alert.alert("Lỗi", "Không thể khởi tạo đơn hàng.");
     } finally {
       setIsSubmitting(false);
     }
