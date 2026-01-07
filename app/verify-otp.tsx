@@ -110,7 +110,13 @@ export default function VerifyOTPScreen() {
           {
             text: "Tiếp tục",
             // Sau khi đăng nhập xong, chuyển người dùng vào trang chủ (tabs)
-            onPress: () => router.replace("/login"),
+            onPress: () =>
+              router.replace({
+                pathname: "/reset-password",
+                params: {
+                  verified: "true",
+                },
+              }),
           },
         ]);
       }

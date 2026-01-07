@@ -1,14 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  collection,
-  doc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
-import React, { useMemo, useState } from "react";
+import { doc, getDoc, runTransaction } from "firebase/firestore";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,7 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth, db } from "../config/firebase";
+import { db } from "../config/firebase";
 
 const { width } = Dimensions.get("window");
 
@@ -42,64 +36,63 @@ export default function SelectSeatScreen() {
     showtimeId: string;
     cinemaId: string;
   }>();
+
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [reservedSeats, setReservedSeats] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 2. Tính tổng tiền dựa trên hàng ghế
+  // 🔹 Load ghế đã bị giữ
+  useEffect(() => {
+    const loadReservedSeats = async () => {
+      try {
+        const ref = doc(db, "showtimes", showtimeId);
+        const snap = await getDoc(ref);
+        setReservedSeats(snap.data()?.reservedSeats || []);
+      } catch {
+        Alert.alert("Lỗi", "Không thể tải trạng thái ghế");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadReservedSeats();
+  }, [showtimeId]);
+
+  // Tính tổng tiền dựa trên hàng ghế
   const totalPrice = useMemo(() => {
     return selectedSeats.reduce((total, seat) => {
       const row = seat[0];
-      // SEAT_PRICES cần được định nghĩa ở ngoài hoặc trong component này
-      const price = row === "C" ? 85000 : 75000;
+      const price = SEAT_PRICES[row as keyof typeof SEAT_PRICES] || 75000;
       return total + price;
     }, 0);
   }, [selectedSeats]);
 
-  // 3. Hàm xử lý logic đặt vé
-  const handleContinue = async () => {
-    if (selectedSeats.length === 0) {
-      Alert.alert("Thông báo", "Vui lòng chọn ít nhất một ghế");
-      return;
-    }
+  // 🔐 KHÓA GHẾ BẰNG TRANSACTION
+  const lockSeats = async () => {
+    const showtimeRef = doc(db, "showtimes", showtimeId);
 
-    if (!movieId || !showtimeId || !cinemaId) {
-      Alert.alert("Lỗi", "Thiếu thông tin. Vui lòng chọn lại.");
-      return;
-    }
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(showtimeRef);
+      const current = snap.data()?.reservedSeats || [];
 
-    setIsSubmitting(true);
-    try {
-      // 1️⃣ Lấy số lượng đơn hàng hiện có để tạo mã bk tiếp theo
-      const snapshot = await getDocs(collection(db, "bookings"));
-      const newBookingId = `bk${snapshot.size + 1}`; // Tạo bk1, bk2...
+      const conflict = selectedSeats.some((s) => current.includes(s));
+      if (conflict) {
+        throw new Error("GHẾ ĐÃ BỊ ĐẶT");
+      }
 
-      // 2️⃣ Dùng setDoc để ép ID tài liệu là bk1, bk2...
-      await setDoc(doc(db, "bookings", newBookingId), {
-        movieId: String(movieId), // ✅ Đảm bảo movieId là string thật
-        showtimeId: showtimeId,
-        cinemaId: cinemaId,
-        seats: selectedSeats,
-        totalPrice: totalPrice,
-        status: "PENDING",
-        userId: auth.currentUser?.uid || "guest",
-        createdAt: serverTimestamp(),
-        bookingId: newBookingId, // Lưu ID vào field để đối chiếu
+      transaction.update(showtimeRef, {
+        reservedSeats: [...current, ...selectedSeats],
       });
-
-      // 3️⃣ Chuyển sang Payment với ID đẹp
-      router.push({
-        pathname: "/payment",
-        params: { bookingId: newBookingId },
-      });
-    } catch (error) {
-      console.error("Lỗi tạo booking:", error);
-      Alert.alert("Lỗi", "Không thể khởi tạo đơn hàng.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   const toggleSeat = (seatId: string) => {
+    // Kiểm tra nếu ghế đã được đặt thì không cho chọn
+    if (reservedSeats.includes(seatId)) {
+      return;
+    }
+
     setSelectedSeats((prev) =>
       prev.includes(seatId)
         ? prev.filter((s) => s !== seatId)
@@ -107,36 +100,77 @@ export default function SelectSeatScreen() {
     );
   };
 
-  const renderSeat = (row: string, seatNum: number) => {
-    const seatId = `${row}${seatNum}`;
-    const isSelected = selectedSeats.includes(seatId);
+  // Hàm xử lý logic đặt vé
+  const handleContinue = async () => {
+    if (selectedSeats.length === 0) {
+      Alert.alert("Thông báo", "Vui lòng chọn ít nhất 1 ghế");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await lockSeats();
+
+      router.push({
+        pathname: "/payment",
+        params: {
+          movieId,
+          showtimeId,
+          cinemaId,
+          seats: JSON.stringify(selectedSeats),
+          totalPrice: String(totalPrice),
+        },
+      });
+    } catch {
+      Alert.alert(
+        "Ghế không khả dụng",
+        "Một hoặc nhiều ghế đã có người đặt trước"
+      );
+      // Reload ghế
+      try {
+        const snap = await getDoc(doc(db, "showtimes", showtimeId));
+        setReservedSeats(snap.data()?.reservedSeats || []);
+      } catch (reloadError) {
+        console.error("Lỗi khi reload ghế:", reloadError);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 🔹 Render ghế với 4 màu khác nhau
+  const renderSeat = (row: string, num: number) => {
+    const id = `${row}${num}`;
+    const isSelected = selectedSeats.includes(id);
+    const isReserved = reservedSeats.includes(id);
     const isPremium = row === "C";
+
+    // Xác định style dựa trên trạng thái
+    let seatStyle;
+    let textStyle;
+
+    if (isReserved) {
+      seatStyle = styles.reservedSeat; // Màu đỏ cho ghế đã đặt
+      textStyle = styles.reservedSeatText;
+    } else if (isSelected) {
+      seatStyle = styles.selectedSeat; // Màu xanh dương cho ghế đã chọn
+      textStyle = styles.selectedSeatText;
+    } else if (isPremium) {
+      seatStyle = styles.premiumSeat; // Màu vàng cho ghế premium
+      textStyle = styles.premiumSeatText;
+    } else {
+      seatStyle = styles.availableSeat; // Màu xám cho ghế có sẵn
+      textStyle = styles.availableSeatText;
+    }
 
     return (
       <TouchableOpacity
-        key={seatId}
-        onPress={() => toggleSeat(seatId)}
-        style={[
-          styles.seat,
-          isSelected && styles.selectedSeat,
-          isPremium && styles.premiumSeat,
-        ]}
-        activeOpacity={0.7}
-        disabled={isSubmitting} // Khóa ghế khi đang xử lý
+        key={id}
+        disabled={isReserved}
+        onPress={() => toggleSeat(id)}
+        style={[seatStyle, isReserved && styles.disabledSeat]}
       >
-        {isSelected ? (
-          <Ionicons name="checkmark" size={14} color="#FFF" />
-        ) : (
-          <Text
-            style={[
-              styles.seatNumber,
-              isSelected && styles.selectedSeatNumber,
-              isPremium && styles.premiumSeatNumber,
-            ]}
-          >
-            {seatNum}
-          </Text>
-        )}
+        <Text style={textStyle}>{num}</Text>
       </TouchableOpacity>
     );
   };
@@ -176,6 +210,16 @@ export default function SelectSeatScreen() {
     );
   };
 
+  // Hiển thị loading khi đang tải
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6B6B" />
+        <Text style={styles.loadingText}>Đang tải thông tin ghế...</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
@@ -190,7 +234,7 @@ export default function SelectSeatScreen() {
         </TouchableOpacity>
 
         <View style={styles.timeContainer}>
-          <Text>Showtime: {showtimeId}</Text>
+          <Text style={styles.showtimeText}>Suất chiếu: {showtimeId}</Text>
           <Text style={styles.formatText}>• 2D Phụ đề</Text>
         </View>
 
@@ -228,6 +272,10 @@ export default function SelectSeatScreen() {
             <View style={[styles.legendIcon, styles.premiumIcon]} />
             <Text style={styles.legendText}>Premium</Text>
           </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendIcon, styles.reservedIcon]} />
+            <Text style={styles.legendText}>Đã đặt</Text>
+          </View>
         </View>
       </ScrollView>
 
@@ -240,7 +288,7 @@ export default function SelectSeatScreen() {
               <Text style={styles.seatCountLabel}>ghế</Text>
             </View>
             <View style={styles.seatDetails}>
-              <Text style={styles.seatNumbers}>
+              <Text style={styles.seatNumbers} numberOfLines={1}>
                 {selectedSeats.sort().join(", ") || "Chưa chọn ghế"}
               </Text>
               <Text style={styles.totalPrice}>
@@ -252,18 +300,16 @@ export default function SelectSeatScreen() {
           <TouchableOpacity
             style={[
               styles.continueButton,
-              // Vô hiệu hóa nút nếu chưa chọn ghế hoặc đang xử lý gửi dữ liệu
               (selectedSeats.length === 0 || isSubmitting) &&
                 styles.disabledButton,
             ]}
             disabled={selectedSeats.length === 0 || isSubmitting}
-            // ✅ THAY ĐỔI TẠI ĐÂY: Gọi hàm handleContinue để lưu vào Firestore
             onPress={handleContinue}
             activeOpacity={0.8}
           >
             <LinearGradient
               colors={
-                selectedSeats.length === 0
+                selectedSeats.length === 0 || isSubmitting
                   ? ["#666", "#444"]
                   : ["#FF6B6B", "#FF8E53"]
               }
@@ -271,7 +317,6 @@ export default function SelectSeatScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              {/* ✅ HIỂN THỊ LOADING: Nếu đang xử lý thì hiện vòng xoay, không thì hiện chữ */}
               {isSubmitting ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
@@ -293,37 +338,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0A0A0A",
   },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#0A0A0A",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "#FFF",
+    marginTop: 12,
+    fontSize: 16,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === "ios" ? 50 : 30,
-    paddingBottom: 20,
-    backgroundColor: "#1A1A1A",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "#1E1E1E",
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
+    padding: 8,
   },
   timeContainer: {
-    flex: 1,
-    alignItems: "center",
     flexDirection: "row",
-    justifyContent: "center",
+    alignItems: "center",
   },
-  timeText: {
+  showtimeText: {
     color: "#FFF",
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "600",
   },
   formatText: {
     color: "#999",
-    fontSize: 16,
+    fontSize: 12,
     marginLeft: 8,
   },
   headerRight: {
@@ -337,57 +386,51 @@ const styles = StyleSheet.create({
   },
   screenSection: {
     alignItems: "center",
-    marginTop: 30,
-    marginBottom: 40,
+    marginTop: 24,
+    marginBottom: 32,
   },
   screen: {
-    width: width * 0.85,
-    height: 30,
-    backgroundColor: "#333",
-    borderRadius: 8,
+    width: width * 0.7,
+    height: 20,
+    backgroundColor: "#2C2C2C",
+    borderRadius: 4,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#444",
   },
   screenText: {
-    color: "#FFF",
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 2,
+    color: "#999",
+    fontSize: 12,
+    fontWeight: "600",
   },
   screenHint: {
-    color: "#999",
-    fontSize: 14,
+    color: "#666",
+    fontSize: 12,
   },
   seatMap: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   rowContainer: {
-    marginBottom: 30,
+    marginBottom: 24,
   },
   rowHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 15,
-    paddingHorizontal: 10,
+    marginBottom: 12,
+    paddingHorizontal: 8,
   },
   rowLetter: {
     color: "#FFF",
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     width: 30,
-    textAlign: "center",
   },
   priceContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "#2C2C2C",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 20,
   },
   priceText: {
     color: "#FFF",
@@ -396,92 +439,130 @@ const styles = StyleSheet.create({
   },
   seatsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
+    justifyContent: "center",
   },
-  seat: {
-    width: 35,
-    height: 35,
+
+  // Ghế có sẵn - Màu xám
+  availableSeat: {
+    width: 32,
+    height: 32,
     borderRadius: 6,
-    backgroundColor: "#333",
+    backgroundColor: "#4A5568", // Xám đậm
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#444",
+    marginHorizontal: 4,
+    marginVertical: 4,
   },
-  seatNumber: {
-    color: "#CCC",
+  availableSeatText: {
+    color: "#E2E8F0",
     fontSize: 12,
     fontWeight: "600",
   },
+
+  // Ghế đã chọn - Màu xanh dương
   selectedSeat: {
-    backgroundColor: "#FF6B6B",
-    borderColor: "#FF5252",
-    transform: [{ scale: 1.1 }],
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: "#4299E1", // Xanh dương sáng
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 4,
+    marginVertical: 4,
   },
-  selectedSeatNumber: {
-    color: "#FFF",
+  selectedSeatText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
+
+  // Ghế premium - Màu vàng/vàng cam
   premiumSeat: {
-    backgroundColor: "rgba(106, 13, 173, 0.2)",
-    borderColor: "#6A0DAD",
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: "#ECC94B", // Vàng cam
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 4,
+    marginVertical: 4,
   },
-  premiumSeatNumber: {
-    color: "#BA55D3",
+  premiumSeatText: {
+    color: "#000000", // Đen cho dễ đọc trên nền vàng
+    fontSize: 12,
+    fontWeight: "700",
   },
+
+  // Ghế đã đặt - Màu đỏ
+  reservedSeat: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: "#F56565", // Đỏ sáng
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 4,
+    marginVertical: 4,
+  },
+  reservedSeatText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  disabledSeat: {
+    opacity: 0.7,
+  },
+
   aisle: {
     width: 20,
   },
   rowTypeLabel: {
     textAlign: "center",
-    color: "#999",
+    color: "#718096",
     fontSize: 12,
-    fontWeight: "600",
     marginTop: 8,
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   premiumLabel: {
-    color: "#BA55D3",
+    color: "#ECC94B",
+    fontWeight: "600",
   },
+
+  // Legend
   legend: {
     flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 40,
-    gap: 30,
-    paddingHorizontal: 20,
+    justifyContent: "space-around",
+    marginTop: 32,
+    paddingHorizontal: 16,
   },
   legendItem: {
     alignItems: "center",
-    width: 80,
   },
   legendIcon: {
-    width: 25,
-    height: 25,
-    borderRadius: 5,
-    borderWidth: 1,
-    marginBottom: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    marginBottom: 4,
   },
   availableIcon: {
-    backgroundColor: "#333",
-    borderColor: "#444",
+    backgroundColor: "#4A5568", // Xám đậm
   },
   selectedIcon: {
-    backgroundColor: "#FF6B6B",
-    borderColor: "#FF5252",
+    backgroundColor: "#4299E1", // Xanh dương
   },
   premiumIcon: {
-    backgroundColor: "rgba(106, 13, 173, 0.2)",
-    borderColor: "#6A0DAD",
+    backgroundColor: "#ECC94B", // Vàng cam
+  },
+  reservedIcon: {
+    backgroundColor: "#F56565", // Đỏ
   },
   legendText: {
-    color: "#CCC",
+    color: "#CBD5E0",
     fontSize: 12,
-    textAlign: "center",
   },
+
+  // Footer
   footer: {
     position: "absolute",
     bottom: 0,
@@ -489,77 +570,69 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: "#1A1A1A",
     borderTopWidth: 1,
-    borderTopColor: "#333",
-    paddingBottom: Platform.OS === "ios" ? 30 : 20,
-    paddingTop: 15,
+    borderTopColor: "#2D3748",
+    paddingBottom: Platform.OS === "ios" ? 20 : 0,
   },
   footerContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    gap: 15,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   selectionInfo: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 15,
+    marginRight: 16,
   },
   seatCountBadge: {
-    backgroundColor: "rgba(255, 107, 107, 0.2)",
-    width: 55,
-    height: 55,
-    borderRadius: 12,
-    justifyContent: "center",
+    backgroundColor: "#2D3748",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255, 107, 107, 0.3)",
+    marginRight: 12,
   },
   seatCount: {
     color: "#FFF",
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "700",
   },
   seatCountLabel: {
-    color: "#FF6B6B",
+    color: "#A0AEC0",
     fontSize: 10,
-    fontWeight: "600",
-    marginTop: -3,
   },
   seatDetails: {
     flex: 1,
   },
   seatNumbers: {
-    color: "#FFF",
+    color: "#E2E8F0",
     fontSize: 14,
-    fontWeight: "600",
     marginBottom: 4,
   },
   totalPrice: {
-    color: "#FFF",
-    fontSize: 22,
-    fontWeight: "800",
+    color: "#4299E1",
+    fontSize: 18,
+    fontWeight: "700",
   },
   continueButton: {
     borderRadius: 12,
     overflow: "hidden",
-    minWidth: 130,
   },
   disabledButton: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   gradientButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 25,
+    paddingHorizontal: 24,
     paddingVertical: 14,
-    gap: 8,
   },
   continueText: {
     color: "#FFF",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
-    letterSpacing: 0.5,
+    marginRight: 8,
   },
 });

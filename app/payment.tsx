@@ -1,20 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { NavigationProp, RouteProp } from "@react-navigation/native";
-import { useLocalSearchParams, useRouter } from "expo-router"; //
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   collection,
   doc,
   getDoc,
   getDocs,
-  serverTimestamp, // Thêm cái này
+  serverTimestamp,
   setDoc,
-  Timestamp,
 } from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -25,7 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../config/firebase";
+import { auth, db } from "../config/firebase";
 
 // Define types
 type RootStackParamList = {
@@ -44,54 +42,29 @@ interface PaymentProps {
   navigation: PaymentScreenNavigationProp;
 }
 
-interface BookingData {
-  id: string;
-  cinemaId: string;
-  createdAt: Timestamp;
-  movieId: string;
-  seats: string[];
-  showtimeId: string;
-  status: string;
-  totalPrice: number;
-  userId: string;
-}
-
 interface MovieData {
   id: string;
   title: string;
-  type?: string;
-  duration?: number;
-  genre?: string[];
-  rating?: string;
   posterUrl?: string;
-  synopsis?: string;
+  type?: string;
 }
 
 interface ShowtimeData {
   id: string;
-  movieId: string;
-  cinemaId: string;
-  startTime: Timestamp;
-  endTime: Timestamp;
-  room: string;
-  availableSeats: number;
-  price: number;
+  startTime: any;
+  endTime: any;
+  room?: string;
 }
 
 interface CinemaData {
   id: string;
   name: string;
-  location?: string;
   address?: string;
 }
 
 export default function Payment({ route, navigation }: PaymentProps) {
-  // Lấy bookingId từ params
-  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
-
-  // State quản lý thông tin
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState("creditCard");
@@ -103,124 +76,95 @@ export default function Payment({ route, navigation }: PaymentProps) {
   const [promoApplied, setPromoApplied] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
-  // State cho dữ liệu từ Firestore
-  const [bookingData, setBookingData] = useState<BookingData | null>(null);
+  // State cho dữ liệu phim, suất chiếu, rạp
   const [movieData, setMovieData] = useState<MovieData | null>(null);
   const [showtimeData, setShowtimeData] = useState<ShowtimeData | null>(null);
   const [cinemaData, setCinemaData] = useState<CinemaData | null>(null);
 
   // State cho tổng tiền
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
   const [subtotal, setSubtotal] = useState(0);
   const [serviceFee] = useState(10000);
 
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
+  const { movieId, showtimeId, cinemaId, seats, totalPrice } =
+    useLocalSearchParams<{
+      movieId: string;
+      showtimeId: string;
+      cinemaId: string;
+      seats: string;
+      totalPrice: string;
+    }>();
 
-  // Fetch booking data từ Firestore
-  const fetchBookingData = useCallback(async () => {
-    if (!bookingId) return;
+  const selectedSeats: string[] = seats ? JSON.parse(seats) : [];
+  const finalTotal: number = totalPrice ? Number(totalPrice) : 0;
 
-    try {
+  // Fetch thông tin phim, suất chiếu, rạp từ Firestore
+  useEffect(() => {
+    const fetchData = async () => {
       setLoading(true);
-
-      // 1. Lấy thông tin Booking từ collection 'bookings'
-      const bookingRef = doc(db, "bookings", bookingId);
-      const bookingSnap = await getDoc(bookingRef);
-
-      if (!bookingSnap.exists()) {
-        throw new Error("Booking không tồn tại");
-      }
-
-      const booking = {
-        id: bookingSnap.id,
-        ...bookingSnap.data(),
-      } as BookingData;
-      setBookingData(booking);
-
-      // 2. Truy vấn dữ liệu Phim (để lấy title và posterUrl)
-      if (booking.movieId) {
-        // Đảm bảo movieId được ép kiểu string để khớp với Document ID trong Firestore
-        const movieRef = doc(db, "movies", String(booking.movieId));
-        const movieSnap = await getDoc(movieRef);
-        if (movieSnap.exists()) {
-          const movieInfo = {
-            id: movieSnap.id,
-            ...movieSnap.data(),
-          } as MovieData;
-          setMovieData(movieInfo);
-          // Log để kiểm tra xem đã lấy được posterUrl chưa
-          console.log(
-            "Dữ liệu phim thật:",
-            movieInfo.title,
-            movieInfo.posterUrl
-          );
-        }
-      }
-
-      // 3. Truy vấn dữ liệu Suất chiếu & Rạp
-      if (booking.showtimeId) {
-        const showtimeRef = doc(db, "showtimes", booking.showtimeId);
-        const showtimeSnap = await getDoc(showtimeRef);
-
-        if (showtimeSnap.exists()) {
-          const showtime = {
-            id: showtimeSnap.id,
-            ...showtimeSnap.data(),
-          } as ShowtimeData;
-          setShowtimeData(showtime);
-
-          // Từ thông tin suất chiếu, truy vấn tiếp lấy tên Rạp thực tế
-          if (showtime.cinemaId) {
-            const cinemaRef = doc(db, "cinemas", showtime.cinemaId);
-            const cinemaSnap = await getDoc(cinemaRef);
-            if (cinemaSnap.exists()) {
-              setCinemaData({
-                id: cinemaSnap.id,
-                ...cinemaSnap.data(),
-              } as CinemaData);
-            }
+      try {
+        // Fetch movie data
+        if (movieId) {
+          const movieRef = doc(db, "movies", movieId as string);
+          const movieSnap = await getDoc(movieRef);
+          if (movieSnap.exists()) {
+            setMovieData({
+              id: movieSnap.id,
+              ...movieSnap.data(),
+            } as MovieData);
           }
         }
-      }
 
-      // 4. Cập nhật số tiền từ dữ liệu thật trong Booking
-      const subtotalCalc = booking.totalPrice || 0;
-      setSubtotal(subtotalCalc);
-      setTotalAmount(subtotalCalc + serviceFee);
-    } catch (error) {
-      console.error("Lỗi fetch dữ liệu thực tế:", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin đặt vé từ hệ thống");
-      if (router.canGoBack()) {
-        router.back();
+        // Fetch showtime data
+        if (showtimeId) {
+          const showtimeRef = doc(db, "showtimes", showtimeId as string);
+          const showtimeSnap = await getDoc(showtimeRef);
+          if (showtimeSnap.exists()) {
+            setShowtimeData({
+              id: showtimeSnap.id,
+              ...showtimeSnap.data(),
+            } as ShowtimeData);
+          }
+        }
+
+        // Fetch cinema data
+        if (cinemaId) {
+          const cinemaRef = doc(db, "cinemas", cinemaId as string);
+          const cinemaSnap = await getDoc(cinemaRef);
+          if (cinemaSnap.exists()) {
+            setCinemaData({
+              id: cinemaSnap.id,
+              ...cinemaSnap.data(),
+            } as CinemaData);
+          }
+        }
+
+        // Tính toán tổng tiền
+        setSubtotal(finalTotal);
+        setTotalAmount(finalTotal + serviceFee);
+      } catch (error) {
+        console.error("Lỗi khi fetch dữ liệu:", error);
+        Alert.alert("Lỗi", "Không thể tải thông tin đặt vé");
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
+    };
+
+    if (movieId || showtimeId || cinemaId) {
+      fetchData();
     }
-  }, [bookingId, serviceFee, router]);
+  }, [movieId, showtimeId, cinemaId, finalTotal, serviceFee]);
 
-  useEffect(() => {
-    if (bookingId) {
-      fetchBookingData();
-    } else {
-      Alert.alert("Lỗi", "Không tìm thấy thông tin đặt vé");
-
-      // ✅ SỬA: Sử dụng router thay cho navigation
-      if (router.canGoBack()) {
-        router.back();
-      }
-    }
-  }, [bookingId, fetchBookingData, router]); // Loại bỏ navigation vì Expo Router không dùng biến này
-
-  // Format ngày
-  const formatDate = (timestamp: Timestamp | Date | string): string => {
+  // Format ngày giờ
+  const formatDateTime = (timestamp: any): string => {
     if (!timestamp) return "N/A";
 
     try {
       let date: Date;
 
-      // Kiểm tra nếu là Timestamp Firebase
-      if (typeof timestamp === "object" && "toDate" in timestamp) {
-        date = (timestamp as Timestamp).toDate();
+      if (timestamp.toDate) {
+        date = timestamp.toDate();
       } else if (timestamp instanceof Date) {
         date = timestamp;
       } else if (typeof timestamp === "string") {
@@ -232,37 +176,12 @@ export default function Payment({ route, navigation }: PaymentProps) {
       const day = date.getDate().toString().padStart(2, "0");
       const month = (date.getMonth() + 1).toString().padStart(2, "0");
       const year = date.getFullYear();
-
-      return `${day}/${month}/${year}`;
-    } catch (error) {
-      console.error("Error formatting date:", error);
-      return "N/A";
-    }
-  };
-
-  // Format giờ
-  const formatTime = (timestamp: Timestamp | Date | string): string => {
-    if (!timestamp) return "N/A";
-
-    try {
-      let date: Date;
-
-      if (typeof timestamp === "object" && "toDate" in timestamp) {
-        date = (timestamp as Timestamp).toDate();
-      } else if (timestamp instanceof Date) {
-        date = timestamp;
-      } else if (typeof timestamp === "string") {
-        date = new Date(timestamp);
-      } else {
-        return "N/A";
-      }
-
       const hours = date.getHours().toString().padStart(2, "0");
       const minutes = date.getMinutes().toString().padStart(2, "0");
 
-      return `${hours}:${minutes}`;
+      return `${hours}:${minutes} - ${day}/${month}/${year}`;
     } catch (error) {
-      console.error("Error formatting time:", error);
+      console.error("Error formatting date:", error);
       return "N/A";
     }
   };
@@ -354,59 +273,33 @@ export default function Payment({ route, navigation }: PaymentProps) {
 
   // Xử lý thanh toán và lưu vào Firestore
   const processPayment = async () => {
+    setProcessingPayment(true);
+
     try {
-      setProcessingPayment(true);
+      const snap = await getDocs(collection(db, "bookings"));
+      const newId = `bk${snap.size + 1}`;
 
-      if (!bookingData) throw new Error("Dữ liệu booking trống");
-
-      // 1️⃣ Đếm chính xác số lượng đơn hàng để tạo mã bk tiếp theo
-      const bookingsSnap = await getDocs(collection(db, "bookings"));
-      const nextId = `bk${bookingsSnap.size + 1}`; // Tạo mã đẹp bk1, bk2...
-
-      // 2️⃣ Ép kiểu dữ liệu "Thật" để không bao giờ bị "unknown"
-      // Ưu tiên lấy ID từ movieData (dữ liệu đã load từ Firestore)
-      const finalMovieId = movieData?.id || bookingData.movieId;
-
-      if (!finalMovieId || finalMovieId === "unknown") {
-        throw new Error("Không thể xác định ID phim để lưu đơn hàng");
-      }
-
-      // 3️⃣ Chụp ảnh dữ liệu (Snapshot) để lưu vào đơn hàng
-      const fullBookingData = {
-        ...bookingData,
-        movieId: finalMovieId, // ✅ Sửa: Luôn lưu ID thật (1, 2, 10...)
-        movieTitle: movieData?.title || "Phim không xác định",
-        moviePoster: movieData?.posterUrl || "", // Lưu poster để trang vé hiện ngay
-        cinemaName: cinemaData?.name || "Rạp không xác định",
-        totalPrice: totalAmount,
+      await setDoc(doc(db, "bookings", newId), {
+        bookingId: newId,
+        movieId,
+        showtimeId,
+        cinemaId,
+        seats: selectedSeats,
+        totalPrice: totalAmount, // Sử dụng totalAmount đã tính toán
+        userId: auth.currentUser?.uid ?? "guest",
         status: "PAID",
-        bookingId: nextId, // Mã định danh bkX
-        updatedAt: serverTimestamp(),
         paymentMethod: selectedPaymentMethod,
-      };
+        discountApplied: promoApplied,
+        discountAmount: discountAmount,
+        createdAt: serverTimestamp(),
+      });
 
-      // 4️⃣ Ghi dữ liệu vào Firestore với ID là bk1, bk2...
-      // Dùng setDoc để thay thế mã ngẫu nhiên Io7K... bằng mã bkX
-      await setDoc(doc(db, "bookings", nextId), fullBookingData);
-
-      // 5️⃣ Thông báo thành công
-      Alert.alert(
-        "Thành công",
-        `Thanh toán thành công! Mã đơn của bạn là: ${nextId}`,
-        [
-          {
-            text: "OK",
-            onPress: () => router.replace("/(tab)"), // Quay về trang chủ
-          },
-        ]
-      );
-    } catch (error: any) {
-      // Cách nhanh nhất là thêm : any
-      console.error("Lỗi thanh toán:", error);
-      Alert.alert(
-        "Lỗi",
-        "Thanh toán thất bại: " + (error?.message || "Lỗi không xác định")
-      );
+      Alert.alert("Thành công", `Thanh toán thành công!`, [
+        { text: "OK", onPress: () => router.replace("/(tab)") },
+      ]);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Lỗi", "Thanh toán thất bại");
     } finally {
       setProcessingPayment(false);
     }
@@ -447,25 +340,11 @@ export default function Payment({ route, navigation }: PaymentProps) {
     setExpiryDate(formattedText);
   };
 
-  // Hiển thị loading
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF6B6B" />
         <Text style={styles.loadingText}>Đang tải thông tin thanh toán...</Text>
-      </View>
-    );
-  }
-
-  // Hiển thị thông báo lỗi nếu không có dữ liệu
-  if (!bookingData) {
-    return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={64} color="#FF6B6B" />
-        <Text style={styles.errorText}>Không tìm thấy thông tin đặt vé</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchBookingData}>
-          <Text style={styles.retryButtonText}>Thử lại</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -481,112 +360,100 @@ export default function Payment({ route, navigation }: PaymentProps) {
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Thanh Toán</Text>
             <Text style={styles.headerSubtitle}>Hoàn tất đặt vé của bạn</Text>
-            <Text style={styles.bookingId}>
-              Mã đặt vé: {bookingId ? bookingId.substring(0, 8) : "N/A"}...
-            </Text>
+            {movieData && (
+              <Text style={styles.bookingId}>Phim: {movieData.title}</Text>
+            )}
           </View>
 
           {/* --- Thông tin phim và vé --- */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông Tin Vé</Text>
 
-            <View style={styles.movieInfo}>
-              <View style={styles.moviePoster}>
-                {/* Sử dụng Image từ react-native để lấy ảnh thật */}
-                {movieData?.posterUrl ? (
-                  <Image
-                    source={{ uri: movieData.posterUrl }}
-                    style={styles.posterImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <Text style={styles.moviePosterText}>🎬</Text>
-                )}
-              </View>
-
-              <View style={styles.movieDetails}>
-                {/* Hiển thị Tên phim thực tế từ MovieData */}
-                <Text style={styles.movieTitle}>
-                  {movieData?.title ||
-                    (loading ? "Đang tải phim..." : "Phim không xác định")}
-                </Text>
-
-                {/* Hiển thị Tên rạp thực tế từ CinemaData */}
-                <Text style={styles.cinemaName}>
-                  {cinemaData?.name ||
-                    (loading ? "Đang tải rạp..." : "Rạp chưa xác định")}
-                </Text>
-
-                <View style={styles.showtimeContainer}>
-                  <Ionicons name="calendar-outline" size={16} color="#666" />
-                  <Text style={styles.showtimeText}>
-                    {showtimeData?.startTime
-                      ? formatDate(showtimeData.startTime)
-                      : "Đang tải..."}
-                  </Text>
-
-                  <Ionicons
-                    name="time-outline"
-                    size={16}
-                    color="#666"
-                    style={styles.timeIcon}
-                  />
-                  <Text style={styles.showtimeText}>
-                    {showtimeData?.startTime
-                      ? formatTime(showtimeData.startTime)
-                      : "N/A"}
-                  </Text>
+            {/* Thông tin chi tiết vé */}
+            <View style={styles.orderInfo}>
+              <View style={styles.movieInfo}>
+                <View style={styles.moviePoster}>
+                  {movieData?.posterUrl ? (
+                    <Text style={styles.moviePosterText}>🎬</Text>
+                  ) : (
+                    <Text style={styles.moviePosterText}>🎬</Text>
+                  )}
                 </View>
-
-                <View style={styles.seatsContainer}>
-                  <Ionicons name="people-outline" size={16} color="#666" />
-                  <Text style={styles.seatsText}>
-                    Ghế:{" "}
-                    {bookingData?.seats
-                      ? bookingData.seats.join(", ")
-                      : "Chưa chọn"}
+                <View style={styles.movieDetails}>
+                  <Text style={styles.movieTitle}>
+                    {movieData?.title || "Đang tải..."}
                   </Text>
+                  <Text style={styles.cinemaName}>
+                    {cinemaData?.name || "Đang tải..."}
+                    {cinemaData?.address && ` - ${cinemaData.address}`}
+                  </Text>
+                  <View style={styles.showtimeContainer}>
+                    <Ionicons name="calendar-outline" size={16} color="#666" />
+                    <Text style={styles.showtimeText}>
+                      {showtimeData
+                        ? formatDateTime(showtimeData.startTime)
+                        : "Đang tải..."}
+                    </Text>
+                  </View>
+                  {showtimeData?.room && (
+                    <View style={styles.seatsContainer}>
+                      <Ionicons
+                        name="videocam-outline"
+                        size={16}
+                        color="#666"
+                      />
+                      <Text style={styles.seatsText}>
+                        Phòng chiếu: {showtimeData.room}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.seatsContainer}>
+                    <Ionicons name="people-outline" size={16} color="#666" />
+                    <Text style={styles.seatsText}>
+                      Ghế: {selectedSeats.join(", ")} ({selectedSeats.length}{" "}
+                      vé)
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* --- Tóm tắt chi phí --- */}
-            <View style={styles.ticketSummary}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>
-                  Vé {movieData?.type || "Standard"} x{" "}
-                  {bookingData?.seats?.length || 0}
-                </Text>
-                <Text style={styles.summaryValue}>
-                  {subtotal.toLocaleString()} VND
-                </Text>
-              </View>
-
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Phí dịch vụ</Text>
-                <Text style={styles.summaryValue}>
-                  {serviceFee.toLocaleString()} VND
-                </Text>
-              </View>
-
-              {promoApplied && (
+              {/* --- Tóm tắt chi phí --- */}
+              <View style={styles.ticketSummary}>
                 <View style={styles.summaryRow}>
-                  <Text style={[styles.summaryLabel, styles.discountText]}>
-                    Giảm giá
+                  <Text style={styles.summaryLabel}>
+                    Vé {movieData?.type || "Standard"} x{selectedSeats.length}
                   </Text>
-                  <Text style={[styles.summaryValue, styles.discountText]}>
-                    -{discountAmount.toLocaleString()} VND
+                  <Text style={styles.summaryValue}>
+                    {subtotal.toLocaleString()} VND
                   </Text>
                 </View>
-              )}
 
-              <View style={styles.divider} />
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Phí dịch vụ</Text>
+                  <Text style={styles.summaryValue}>
+                    {serviceFee.toLocaleString()} VND
+                  </Text>
+                </View>
 
-              <View style={styles.summaryRow}>
-                <Text style={styles.totalLabel}>Tổng cộng</Text>
-                <Text style={styles.totalValue}>
-                  {totalAmount.toLocaleString()} VND
-                </Text>
+                {promoApplied && (
+                  <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, styles.discountText]}>
+                      Giảm giá
+                    </Text>
+                    <Text style={[styles.summaryValue, styles.discountText]}>
+                      -{discountAmount.toLocaleString()} VND
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.divider} />
+
+                <View style={styles.summaryRow}>
+                  <Text style={styles.totalLabel}>Tổng cộng</Text>
+                  <Text style={styles.totalValue}>
+                    {totalAmount.toLocaleString()} VND
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
@@ -850,12 +717,6 @@ export default function Payment({ route, navigation }: PaymentProps) {
 }
 
 const styles = StyleSheet.create({
-  posterImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 8,
-  },
-
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
@@ -873,31 +734,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     color: "#666",
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 18,
-    color: "#333",
-    marginTop: 20,
-    marginBottom: 30,
-    textAlign: "center",
-  },
-  retryButton: {
-    backgroundColor: "#FF6B6B",
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#FFF",
-    fontWeight: "600",
-    fontSize: 16,
   },
   header: {
     padding: 20,
@@ -947,7 +783,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 15,
-    overflow: "hidden",
   },
   moviePosterText: {
     fontSize: 36,
@@ -976,14 +811,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666",
     marginLeft: 5,
-    marginRight: 15,
-  },
-  timeIcon: {
-    marginLeft: 10,
   },
   seatsContainer: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 5,
   },
   seatsText: {
     fontSize: 13,
