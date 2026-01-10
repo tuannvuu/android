@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Link, router, useRouter } from "expo-router";
 import { collection, onSnapshot } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
+
 import {
   ActivityIndicator,
   Dimensions,
@@ -203,6 +204,7 @@ export default function PremiumHomeScreen() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("nowPlaying");
+  const router = useRouter();
 
   type TabType = "nowPlaying" | "comingSoon" | "special";
 
@@ -436,6 +438,23 @@ export default function PremiumHomeScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+      <TouchableOpacity
+        onPress={() => router.push("/chat-ai")}
+        style={{
+          position: "absolute",
+          bottom: 25,
+          right: 20,
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          backgroundColor: "#5b7cfa",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 999,
+        }}
+      >
+        <Text style={{ color: "#fff", fontSize: 26 }}>💬</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

@@ -1,13 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { PhoneAuthProvider, signInWithCredential } from "firebase/auth";
-import {
-  ArrowLeft,
-  Mail,
-  RotateCw,
-  Shield,
-  Smartphone,
-} from "lucide-react-native";
+import { ArrowLeft, RotateCw, Shield } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -23,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../config/firebase";
 
 type InputRefsArray = (TextInput | null)[];
 
@@ -36,7 +28,9 @@ export default function VerifyOTPScreen() {
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const [isResendEnabled, setIsResendEnabled] = useState(false);
-  const [resetMethod, setResetMethod] = useState("phone"); // 'phone' hoặc 'email'
+  const [resetMethod] = useState("phone");
+  const [attempts, setAttempts] = useState(0);
+  const { phone } = useLocalSearchParams<{ phone: string }>();
 
   // Xử lý khi người dùng nhập OTP
   const handleOtpChange = (text: string, index: number) => {
@@ -75,11 +69,8 @@ export default function VerifyOTPScreen() {
       }
     }
   };
-  // ... trong component VerifyOTPScreen ...
 
-  // Lấy verificationId được truyền từ trang trước (trang nhập số điện thoại)
-  const { verificationId } = useLocalSearchParams<{ verificationId: string }>();
-
+  // Xác thực OTP (DEMO MODE)
   const handleVerifyOTP = async (otpCode: string | null = null) => {
     const code = otpCode !== null ? otpCode : otp.join("");
 
@@ -89,67 +80,96 @@ export default function VerifyOTPScreen() {
       return;
     }
 
-    // Kiểm tra nếu không có mã xác thực từ trang trước truyền sang
-    if (!verificationId) {
-      Alert.alert("Lỗi", "Phiên làm việc đã hết hạn. Vui lòng gửi lại mã OTP.");
-      return;
-    }
-
     setLoading(true);
 
-    try {
-      // ✅ BƯỚC 1: Tạo "Credential" từ mã OTP người dùng nhập và ID xác thực
-      const credential = PhoneAuthProvider.credential(verificationId, code);
+    // Tăng số lần thử
+    setAttempts((prev) => prev + 1);
 
-      // ✅ BƯỚC 2: Tiến hành đăng nhập thật vào Firebase
-      const userCredential = await signInWithCredential(auth, credential);
-
-      if (userCredential.user) {
-        setLoading(false);
-        Alert.alert("🎉 Thành công!", "Xác thực OTP thành công!", [
-          {
-            text: "Tiếp tục",
-            // Sau khi đăng nhập xong, chuyển người dùng vào trang chủ (tabs)
-            onPress: () =>
-              router.replace({
-                pathname: "/reset-password",
-                params: {
-                  verified: "true",
-                },
-              }),
-          },
-        ]);
-      }
-    } catch (error: any) {
+    // DEMO: Chỉ chấp nhận mã 123456
+    setTimeout(() => {
       setLoading(false);
-      console.error("Lỗi xác thực OTP thật:", error.code);
 
-      // Xử lý các lỗi phổ biến từ Firebase
-      let message = "Có lỗi xảy ra, vui lòng thử lại.";
-      if (error.code === "auth/invalid-verification-code") {
-        message = "Mã OTP không chính xác. Vui lòng kiểm tra lại.";
-      } else if (error.code === "auth/code-expired") {
-        message = "Mã OTP đã hết hạn. Hãy bấm gửi lại mã.";
+      if (code === "123456") {
+        Alert.alert(
+          "🎉 Thành công!",
+          "Xác thực OTP thành công! Vui lòng tạo mật khẩu mới.",
+          [
+            {
+              text: "Tiếp tục",
+              onPress: () =>
+                router.push({
+                  pathname: "/reset-password",
+                  params: {
+                    phone: phone, // ✅ TRUYỀN SĐT SANG RESET PASSWORD
+                  },
+                }),
+            },
+          ]
+        );
+      } else if (code === "000000") {
+        Alert.alert(
+          "Thông báo demo",
+          "Mã 000000 là để demo lỗi. Hãy nhập 123456 để thành công."
+        );
+      } else {
+        // Kiểm tra số lần thử
+        if (attempts >= 3) {
+          Alert.alert(
+            "⚠️ Quá nhiều lần thử",
+            "Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã OTP mới.",
+            [
+              {
+                text: "Gửi lại mã",
+                onPress: handleResendOTP,
+              },
+            ]
+          );
+          return;
+        }
+
+        Alert.alert(
+          "❌ Mã OTP không chính xác",
+          `Mã bạn nhập không đúng. (Thử lần ${attempts}/3)\n\nHãy nhập: 123456`
+        );
       }
-
-      Alert.alert("❌ Lỗi", message);
-    }
+    }, 1000);
   };
 
-  // Gửi lại OTP
+  // Gửi lại OTP (DEMO)
   const handleResendOTP = () => {
     if (!isResendEnabled) return;
 
     setLoading(true);
-    console.log("Đang gửi lại OTP...");
+    console.log("📨 [DEMO] Đang gửi lại OTP...");
 
     // Reset timer
     setResendTimer(60);
     setIsResendEnabled(false);
 
+    // Reset số lần thử
+    setAttempts(0);
+
+    // Reset OTP fields
+    setOtp(["", "", "", "", "", ""]);
+
     setTimeout(() => {
       setLoading(false);
-      Alert.alert("📨 Đã gửi", "Mã OTP mới đã được gửi đến bạn");
+      Alert.alert(
+        "📨 Đã gửi lại mã OTP",
+        "Mã OTP mới (123456) đã được gửi đến bạn.\n\nVui lòng nhập mã 123456 để tiếp tục.",
+        [
+          {
+            text: "Đã hiểu",
+            onPress: () => {
+              // Focus vào ô đầu tiên
+              const firstInput = inputRefs.current[0];
+              if (firstInput) {
+                firstInput.focus();
+              }
+            },
+          },
+        ]
+      );
       startResendTimer();
     }, 1000);
   };
@@ -183,7 +203,7 @@ export default function VerifyOTPScreen() {
       "Nhập OTP thủ công",
       `Nhập đầy đủ 6 số OTP đã được gửi đến ${
         resetMethod === "phone" ? "số điện thoại" : "email"
-      } của bạn:`,
+      } của bạn:\n\n(Demo: 123456)`,
       [
         { text: "Hủy", style: "cancel" },
         {
@@ -199,9 +219,23 @@ export default function VerifyOTPScreen() {
         },
       ],
       "plain-text",
-      "",
+      "123456",
       "numeric"
     );
+  };
+
+  // Tự động điền mã demo
+  const fillDemoOTP = () => {
+    const demoOTP = "123456".split("");
+    setOtp(demoOTP);
+
+    // Focus vào ô cuối cùng
+    const lastInput = inputRefs.current[5];
+    if (lastInput) {
+      lastInput.focus();
+    }
+
+    Alert.alert("✅ Đã điền mã demo", "Nhấn 'XÁC THỰC OTP' để tiếp tục.");
   };
 
   return (
@@ -236,34 +270,25 @@ export default function VerifyOTPScreen() {
               <Shield size={28} color="#FFFFFF" />
             </LinearGradient>
             <Text style={styles.logoText}>LiDoRa</Text>
-            <Text style={styles.tagline}>Xác thực OTP</Text>
+            <Text style={styles.tagline}>Xác thực OTP (Chế độ Demo)</Text>
           </View>
 
           {/* Welcome Section */}
           <View style={styles.welcomeSection}>
             <Text style={styles.welcomeTitle}>Xác Thực Mã OTP 🔐</Text>
             <Text style={styles.welcomeSubtitle}>
-              Chúng tôi đã gửi mã 6 số đến{" "}
-              {resetMethod === "phone" ? "số điện thoại" : "email"} của bạn.
+              Đây là chế độ DEMO. Hãy nhập mã:{" "}
               <Text style={{ fontWeight: "bold", color: "#f5576c" }}>
-                {" "}
-                (Mã demo: 123456)
+                123456
               </Text>
             </Text>
           </View>
 
-          {/* Reset Method Indicator */}
-          <View style={styles.methodIndicator}>
-            <View style={styles.methodIndicatorItem}>
-              {resetMethod === "phone" ? (
-                <Smartphone size={16} color="#FFFFFF" />
-              ) : (
-                <Mail size={16} color="#FFFFFF" />
-              )}
-              <Text style={styles.methodIndicatorText}>
-                Nhận mã qua {resetMethod === "phone" ? "SMS" : "Email"}
-              </Text>
-            </View>
+          {/* Demo Banner */}
+          <View style={styles.demoBanner}>
+            <Text style={styles.demoBannerText}>
+              🎬 CHẾ ĐỘ DEMO - Nhập mã: 123456
+            </Text>
           </View>
 
           {/* Form Card */}
@@ -300,6 +325,17 @@ export default function VerifyOTPScreen() {
                 ⏱️ Mã OTP có hiệu lực trong 5 phút
               </Text>
             </View>
+
+            {/* Auto-fill Demo Button */}
+            <TouchableOpacity
+              style={styles.demoFillButton}
+              onPress={fillDemoOTP}
+              disabled={loading}
+            >
+              <Text style={styles.demoFillButtonText}>
+                ⚡ Tự động điền mã demo (123456)
+              </Text>
+            </TouchableOpacity>
 
             {/* Resend OTP Section */}
             <View style={styles.resendContainer}>
@@ -360,34 +396,33 @@ export default function VerifyOTPScreen() {
               <TouchableOpacity
                 style={styles.alternativeButton}
                 onPress={() => {
-                  setResetMethod(resetMethod === "phone" ? "email" : "phone");
                   Alert.alert(
-                    "Thay đổi phương thức",
-                    `Đã chuyển sang nhận mã qua ${
-                      resetMethod === "phone" ? "email" : "SMS"
-                    }`
+                    "Demo Mode",
+                    "Đây là chế độ demo. Tính năng đổi phương thức sẽ hoạt động trong môi trường thực tế."
                   );
                 }}
               >
                 <Text style={styles.alternativeButtonText}>
-                  🔄 Đổi phương thức nhận mã
+                  🔄 Đổi phương thức (Demo)
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* Demo Instructions */}
             <View style={styles.demoContainer}>
-              <Text style={styles.demoTitle}>💡 Hướng dẫn demo:</Text>
+              <Text style={styles.demoTitle}>📋 Hướng dẫn sử dụng DEMO:</Text>
               <Text style={styles.demoText}>
-                • Nhập <Text style={styles.demoCode}>123456</Text> để xác thực
-                thành công
+                • Nhập <Text style={styles.demoCode}>123456</Text> để thành công
               </Text>
               <Text style={styles.demoText}>
-                • Nhập <Text style={styles.demoCode}>000000</Text> để xem thông
-                báo lỗi
+                • Nhập <Text style={styles.demoCode}>000000</Text> để xem lỗi
+                demo
               </Text>
               <Text style={styles.demoText}>
-                • Mã khác sẽ hiển thị lỗi xác thực
+                • Các mã khác: Hiển thị thông báo lỗi
+              </Text>
+              <Text style={styles.demoText}>
+                • Số lần thử: {attempts}/3 (Reset khi gửi lại mã)
               </Text>
             </View>
           </View>
@@ -398,10 +433,13 @@ export default function VerifyOTPScreen() {
               Cần hỗ trợ?{" "}
               <TouchableOpacity
                 onPress={() =>
-                  Alert.alert("Hỗ trợ", "Liên hệ hotline: 1900 1234")
+                  Alert.alert(
+                    "Hỗ trợ DEMO",
+                    "Đây là ứng dụng demo. Trong môi trường thực tế, hãy liên hệ bộ phận hỗ trợ."
+                  )
                 }
               >
-                <Text style={styles.helpLink}>Liên hệ ngay</Text>
+                <Text style={styles.helpLink}>Thông tin demo</Text>
               </TouchableOpacity>
             </Text>
           </View>
@@ -468,7 +506,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     paddingTop: 100,
-    paddingBottom: 30,
+    paddingBottom: 20,
   },
   logoContainer: {
     width: 80,
@@ -490,21 +528,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   tagline: {
-    fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
-    marginTop: 8,
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.8)",
+    marginTop: 4,
     letterSpacing: 1,
   },
   // Welcome Section
   welcomeSection: {
     alignItems: "center",
-    marginBottom: 25,
+    marginBottom: 15,
   },
   welcomeTitle: {
     fontSize: 28,
     fontWeight: "700",
     color: "#FFFFFF",
-    marginBottom: 12,
+    marginBottom: 8,
     textShadowColor: "rgba(0, 0, 0, 0.2)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -516,25 +554,21 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 20,
   },
-  // Method Indicator
-  methodIndicator: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 25,
+  // Demo Banner
+  demoBanner: {
+    backgroundColor: "rgba(255, 193, 7, 0.2)",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+    marginHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 193, 7, 0.3)",
   },
-  methodIndicatorItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  methodIndicatorText: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    marginLeft: 8,
-    fontWeight: "500",
+  demoBannerText: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#FFC107",
+    textAlign: "center",
   },
   // Form Card
   formCard: {
@@ -552,7 +586,7 @@ const styles = StyleSheet.create({
   },
   // OTP Container
   otpContainer: {
-    marginBottom: 25,
+    marginBottom: 20,
     alignItems: "center",
   },
   otpLabel: {
@@ -594,6 +628,21 @@ const styles = StyleSheet.create({
     color: "#764ba2",
     textAlign: "center",
     marginTop: 10,
+  },
+  // Demo Fill Button
+  demoFillButton: {
+    backgroundColor: "rgba(118, 75, 162, 0.15)",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(118, 75, 162, 0.3)",
+  },
+  demoFillButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#764ba2",
   },
   // Resend Container
   resendContainer: {

@@ -20,30 +20,28 @@ const { width } = Dimensions.get("window");
 // Màn hình Quên Mật khẩu
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetMethod] = useState("phone");
 
   const handleResetPassword = async () => {
-    if (!email) {
-      Alert.alert(
-        "Lỗi",
-        `Vui lòng nhập ${
-          resetMethod === "phone" ? "số điện thoại" : "email"
-        } để đặt lại mật khẩu.`
-      );
+    if (!phone) {
+      Alert.alert("Lỗi", "Vui lòng nhập số điện thoại");
       return;
     }
 
     setLoading(true);
+    console.log(`Đang gửi OTP đến số: ${phone}`);
 
-    console.log(`Đang gửi liên kết đặt lại mật khẩu đến: ${email}`);
-
-    // Mô phỏng gửi email/SMS
+    // 🔥 OTP DEMO
     setTimeout(() => {
       setLoading(false);
-      // ✅ Đã bỏ Alert, điều hướng trực tiếp sang trang nhập OTP
-      router.push("/verify-otp");
+      router.push({
+        pathname: "/verify-otp",
+        params: {
+          phone, // 👈 truyền sang màn OTP
+        },
+      });
     }, 1000);
   };
 
@@ -119,8 +117,8 @@ export default function ForgotPasswordScreen() {
                   resetMethod === "phone" ? "09xxxxxxxx" : "you@example.com"
                 }
                 placeholderTextColor="#a78bfa"
-                value={email}
-                onChangeText={setEmail}
+                value={phone}
+                onChangeText={setPhone}
                 keyboardType={
                   resetMethod === "phone" ? "phone-pad" : "email-address"
                 }
@@ -153,7 +151,7 @@ export default function ForgotPasswordScreen() {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={email ? ["#4facfe", "#00f2fe"] : ["#ccc", "#999"]}
+                colors={phone ? ["#4facfe", "#00f2fe"] : ["#ccc", "#999"]}
                 style={styles.gradientButton}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
