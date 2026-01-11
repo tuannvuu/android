@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { doc, getDoc, runTransaction } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -40,7 +40,7 @@ export default function SelectSeatScreen() {
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [reservedSeats, setReservedSeats] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting] = useState(false);
 
   // 🔹 Load ghế đã bị giữ
   useEffect(() => {
@@ -68,25 +68,6 @@ export default function SelectSeatScreen() {
     }, 0);
   }, [selectedSeats]);
 
-  // 🔐 KHÓA GHẾ BẰNG TRANSACTION
-  const lockSeats = async () => {
-    const showtimeRef = doc(db, "showtimes", showtimeId);
-
-    await runTransaction(db, async (transaction) => {
-      const snap = await transaction.get(showtimeRef);
-      const current = snap.data()?.reservedSeats || [];
-
-      const conflict = selectedSeats.some((s) => current.includes(s));
-      if (conflict) {
-        throw new Error("GHẾ ĐÃ BỊ ĐẶT");
-      }
-
-      transaction.update(showtimeRef, {
-        reservedSeats: [...current, ...selectedSeats],
-      });
-    });
-  };
-
   const toggleSeat = (seatId: string) => {
     // Kiểm tra nếu ghế đã được đặt thì không cho chọn
     if (reservedSeats.includes(seatId)) {
@@ -102,40 +83,16 @@ export default function SelectSeatScreen() {
 
   // Hàm xử lý logic đặt vé
   const handleContinue = async () => {
-    if (selectedSeats.length === 0) {
-      Alert.alert("Thông báo", "Vui lòng chọn ít nhất 1 ghế");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      await lockSeats();
-
-      router.push({
-        pathname: "/payment",
-        params: {
-          movieId,
-          showtimeId,
-          cinemaId,
-          seats: JSON.stringify(selectedSeats),
-          totalPrice: String(totalPrice),
-        },
-      });
-    } catch {
-      Alert.alert(
-        "Ghế không khả dụng",
-        "Một hoặc nhiều ghế đã có người đặt trước"
-      );
-      // Reload ghế
-      try {
-        const snap = await getDoc(doc(db, "showtimes", showtimeId));
-        setReservedSeats(snap.data()?.reservedSeats || []);
-      } catch (reloadError) {
-        console.error("Lỗi khi reload ghế:", reloadError);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    router.push({
+      pathname: "/payment",
+      params: {
+        movieId,
+        showtimeId,
+        cinemaId,
+        seats: JSON.stringify(selectedSeats),
+        totalPrice: String(totalPrice),
+      },
+    });
   };
 
   // 🔹 Render ghế với 4 màu khác nhau

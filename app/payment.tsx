@@ -5,7 +5,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
@@ -23,7 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth, db } from "../config/firebase";
+import { db } from "../config/firebase";
 
 // Define types
 type RootStackParamList = {
@@ -234,38 +233,18 @@ export default function Payment({ route, navigation }: PaymentProps) {
   // Xử lý thanh toán
   const handlePayment = async () => {
     if (!agreeToTerms) {
-      Alert.alert("Lỗi", "Vui lòng đồng ý với điều khoản và điều kiện");
+      Alert.alert("Lỗi", "Vui lòng đồng ý với điều khoản");
       return;
-    }
-
-    if (selectedPaymentMethod === "creditCard") {
-      if (!cardNumber || !cardHolder || !expiryDate || !cvv) {
-        Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin thẻ");
-        return;
-      }
-
-      // Validate thẻ
-      if (cardNumber.replace(/\s/g, "").length !== 16) {
-        Alert.alert("Lỗi", "Số thẻ phải có 16 chữ số");
-        return;
-      }
-
-      if (cvv.length !== 3) {
-        Alert.alert("Lỗi", "CVV phải có 3 chữ số");
-        return;
-      }
     }
 
     Alert.alert(
       "Xác nhận thanh toán",
-      `Bạn có chắc chắn muốn thanh toán ${totalAmount.toLocaleString()} VND?`,
+      `Thanh toán ${totalAmount.toLocaleString()} VND?`,
       [
         { text: "Hủy", style: "cancel" },
         {
           text: "Thanh toán",
-          onPress: async () => {
-            await processPayment();
-          },
+          onPress: processPayment,
         },
       ]
     );
@@ -273,35 +252,86 @@ export default function Payment({ route, navigation }: PaymentProps) {
 
   // Xử lý thanh toán và lưu vào Firestore
   const processPayment = async () => {
+    if (selectedPaymentMethod !== "zalopay") {
+      Alert.alert("Thông báo", "Vui lòng chọn ZaloPay");
+      return;
+    }
+
     setProcessingPayment(true);
 
     try {
-      const snap = await getDocs(collection(db, "bookings"));
-      const newId = `bk${snap.size + 1}`;
+      console.log("🔥 processPayment START");
 
-      await setDoc(doc(db, "bookings", newId), {
-        bookingId: newId,
+      // 1️⃣ Tạo booking PENDING
+      const bookingRef = doc(collection(db, "bookings"));
+      const bookingId = bookingRef.id;
+
+      await setDoc(bookingRef, {
+        bookingId,
         movieId,
         showtimeId,
         cinemaId,
         seats: selectedSeats,
-        totalPrice: totalAmount, // Sử dụng totalAmount đã tính toán
-        userId: auth.currentUser?.uid ?? "guest",
-        status: "PAID",
-        paymentMethod: selectedPaymentMethod,
-        discountApplied: promoApplied,
-        discountAmount: discountAmount,
+        totalPrice: totalAmount,
+        status: "PENDING",
         createdAt: serverTimestamp(),
       });
 
-      Alert.alert("Thành công", `Thanh toán thành công!`, [
-        { text: "OK", onPress: () => router.replace("/(tab)") },
-      ]);
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Lỗi", "Thanh toán thất bại");
+      console.log("✅ Booking created:", bookingId);
+
+      // 2️⃣ Gọi backend (có timeout)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000); // 10s
+
+      console.log("🌐 Calling backend...");
+
+      const res = await fetch("http://192.168.120.45:8080/api/payment/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId,
+          amount: totalAmount,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      console.log("📡 Backend status:", res.status);
+
+      const text = await res.text();
+      console.log("👉 RAW RESPONSE:", text);
+
+      if (!res.ok || !text) {
+        throw new Error("Backend trả lỗi hoặc rỗng");
+      }
+
+      const data = JSON.parse(text);
+
+      if (!data.order_url) throw new Error("Thiếu order_url");
+
+      // 3️⃣ Sang màn QR
+      console.log("➡️ Go to payment-qr");
+
+      router.push({
+        pathname: "/payment-qr",
+        params: {
+          bookingId,
+          orderUrl: data.order_url,
+          orderToken: data.order_token,
+        },
+      });
+    } catch (err: any) {
+      console.error("❌ processPayment ERROR:", err);
+
+      if (err.name === "AbortError") {
+        Alert.alert("Lỗi", "Backend không phản hồi (timeout)");
+      } else {
+        Alert.alert("Lỗi", err.message || "Không tạo được QR");
+      }
     } finally {
       setProcessingPayment(false);
+      console.log("🔚 processPayment END");
     }
   };
 

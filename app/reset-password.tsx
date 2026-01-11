@@ -1,6 +1,14 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {} from "firebase/auth";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -38,6 +46,11 @@ export default function ResetPasswordScreen() {
       return;
     }
 
+    if (!currentPassword) {
+      showError("Vui lòng nhập mật khẩu hiện tại");
+      return;
+    }
+
     if (password.length < 6) {
       showError("Mật khẩu mới phải có ít nhất 6 ký tự");
       return;
@@ -48,13 +61,34 @@ export default function ResetPasswordScreen() {
       return;
     }
 
+    if (currentPassword === password) {
+      showError("Mật khẩu mới không được trùng mật khẩu cũ");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const userRef = doc(db, "users", phone);
+      const q = query(collection(db, "users"), where("phone", "==", phone));
 
-      await updateDoc(userRef, {
-        password: password,
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        showError("Tài khoản không tồn tại");
+        return;
+      }
+
+      const userDoc = snapshot.docs[0];
+      const userData = userDoc.data();
+
+      // 🔐 so sánh với Firestore
+      if (userData.password !== currentPassword) {
+        showError("Mật khẩu hiện tại không đúng");
+        return;
+      }
+
+      await updateDoc(userDoc.ref, {
+        password,
         updatedAt: serverTimestamp(),
       });
 
@@ -71,6 +105,7 @@ export default function ResetPasswordScreen() {
       setLoading(false);
     }
   };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}

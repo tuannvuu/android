@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
@@ -32,14 +33,14 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [loginMethod] = useState("phone"); // 'phone' hoặc 'email'
+  const [loginMethod] = useState("phone");
 
   const handleLogin = async () => {
     if (!phone || !password) {
       Alert.alert(
         "Lỗi",
         `Vui lòng nhập ${
-          loginMethod === "phone" ? "số điện thoại" : "email"
+          loginMethod === "phone" ? "số điện thoại" : ""
         } và mật khẩu`
       );
       return;
@@ -62,6 +63,7 @@ export default function LoginScreen() {
         }
 
         if (userData.password === password) {
+          await AsyncStorage.setItem("phone", phone.trim());
           router.replace("/(tab)");
         } else {
           Alert.alert("Lỗi", "Mật khẩu không chính xác");
@@ -105,9 +107,9 @@ export default function LoginScreen() {
       style={styles.container}
     >
       {/* Decorative Circles */}
-      <View style={styles.circle1} />
-      <View style={styles.circle2} />
-      <View style={styles.circle3} />
+      <View style={styles.circle1} pointerEvents="none" />
+      <View style={styles.circle2} pointerEvents="none" />
+      <View style={styles.circle3} pointerEvents="none" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -116,6 +118,7 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
           <View style={styles.header}>

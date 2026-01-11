@@ -1,41 +1,16 @@
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-
-// ✅ MODEL ĐÚNG THEO listModels
-const API_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=" +
-  API_KEY;
-
 export async function askGemini(question: string): Promise<string> {
-  const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Bạn là chatbot hỗ trợ khách hàng cho ứng dụng đặt vé phim.
-Chỉ trả lời bằng tiếng Việt, ngắn gọn, dễ hiểu.
-
-Câu hỏi:
-${question}`,
-          },
-        ],
-      },
-    ],
-  };
-
-  const res = await fetch(API_URL, {
+  const res = await fetch("http://192.168.120.45:8080/api/ask-ai", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ question }),
   });
 
   if (!res.ok) {
-    throw new Error(await res.text());
+    throw new Error("Backend AI error");
   }
 
   const data = await res.json();
-  return (
-    data.candidates?.[0]?.content?.parts?.[0]?.text ??
-    "Xin lỗi, mình chưa trả lời được câu hỏi này."
-  );
+  return data.text;
 }
