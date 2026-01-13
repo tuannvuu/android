@@ -10,9 +10,15 @@
     "newArchEnabled": true,
     "ios": {
   "supportsTablet": true,
-  "bundleIdentifier": "com.vuviet.myapp", 
-  "googleServicesFile": "./GoogleService-Info.plist"
+  "bundleIdentifier": "com.vuviet.myapp",
+  "googleServicesFile": "./GoogleService-Info.plist",
+  "infoPlist": {
+    "NSAppTransportSecurity": {
+      "NSAllowsArbitraryLoads": true
+    }
+  }
 },
+
     "android": {
       "package": "com.vuviet.myapp",
       "adaptiveIcon": {

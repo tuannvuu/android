@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -36,19 +36,37 @@ export default function SelectSeatScreen() {
     showtimeId: string;
     cinemaId: string;
   }>();
+  const currentUserId = "USER_TEST_1";
 
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [reservedSeats, setReservedSeats] = useState<string[]>([]);
+  const [seatLocks, setSeatLocks] = useState<any>({});
+
   const [loading, setLoading] = useState(true);
   const [isSubmitting] = useState(false);
 
   // 🔹 Load ghế đã bị giữ
   useEffect(() => {
-    const loadReservedSeats = async () => {
+    const loadSeats = async () => {
       try {
         const ref = doc(db, "showtimes", showtimeId);
         const snap = await getDoc(ref);
-        setReservedSeats(snap.data()?.reservedSeats || []);
+
+        const data = snap.data() || {};
+        const locks = data.seatLocks || {};
+        const now = Date.now();
+
+        // 🔥 Clean lock quá 5 phút
+        Object.keys(locks).forEach((seat) => {
+          if (now - locks[seat].lockedAt > 5 * 60 * 1000) {
+            delete locks[seat];
+          }
+        });
+
+        await updateDoc(ref, { seatLocks: locks });
+
+        setReservedSeats(data.reservedSeats || []);
+        setSeatLocks(locks);
       } catch {
         Alert.alert("Lỗi", "Không thể tải trạng thái ghế");
       } finally {
@@ -56,8 +74,63 @@ export default function SelectSeatScreen() {
       }
     };
 
-    loadReservedSeats();
+    loadSeats();
   }, [showtimeId]);
+
+  const isValidSeatSelection = (
+    selectedSeats: string[],
+    reservedSeats: string[]
+  ) => {
+    const rows = new Set([...selectedSeats, ...reservedSeats].map((s) => s[0]));
+
+    for (const row of rows) {
+      const selected = selectedSeats
+        .filter((s) => s[0] === row)
+        .map((s) => Number(s.slice(1)));
+
+      const reserved = reservedSeats
+        .filter((s) => s[0] === row)
+        .map((s) => Number(s.slice(1)));
+
+      // Không chọn ghế nào ở hàng này → bỏ qua
+      if (selected.length === 0) continue;
+
+      // Tạo map trạng thái ghế
+      const seats: ("X" | "R" | "_")[] = [];
+
+      for (let i = 1; i <= SEATS_PER_ROW; i++) {
+        if (selected.includes(i)) seats.push("X");
+        else if (reserved.includes(i)) seats.push("R");
+        else seats.push("_");
+      }
+
+      // Quét tìm đoạn "_" dài đúng 1
+      let emptyCount = 0;
+      for (let i = 0; i < seats.length; i++) {
+        if (seats[i] === "_") {
+          emptyCount++;
+        } else {
+          if (emptyCount === 1) {
+            return {
+              valid: false,
+              message: "Không được bỏ trống 1 ghế.",
+            };
+          }
+          emptyCount = 0;
+        }
+      }
+
+      // Check cuối hàng
+      if (emptyCount === 1) {
+        return {
+          valid: false,
+          message: "Không được bỏ trống 1 ghế.",
+        };
+      }
+    }
+
+    return { valid: true };
+  };
 
   // Tính tổng tiền dựa trên hàng ghế
   const totalPrice = useMemo(() => {
@@ -69,20 +142,42 @@ export default function SelectSeatScreen() {
   }, [selectedSeats]);
 
   const toggleSeat = (seatId: string) => {
-    // Kiểm tra nếu ghế đã được đặt thì không cho chọn
-    if (reservedSeats.includes(seatId)) {
-      return;
-    }
+    if (reservedSeats.includes(seatId)) return;
 
-    setSelectedSeats((prev) =>
-      prev.includes(seatId)
+    setSelectedSeats((prev) => {
+      const next = prev.includes(seatId)
         ? prev.filter((s) => s !== seatId)
-        : [...prev, seatId]
-    );
+        : [...prev, seatId];
+
+      const check = isValidSeatSelection(next, reservedSeats);
+
+      if (!check.valid) {
+        Alert.alert("Thông báo", check.message);
+        return prev; // ❌ rollback
+      }
+
+      return next; // ✅ hợp lệ
+    });
   };
 
   // Hàm xử lý logic đặt vé
   const handleContinue = async () => {
+    const ref = doc(db, "showtimes", showtimeId);
+    const snap = await getDoc(ref);
+
+    const seatLocks = snap.data()?.seatLocks || {};
+    const now = Date.now();
+    const userId = "CURRENT_USER_ID";
+
+    selectedSeats.forEach((seat) => {
+      seatLocks[seat] = {
+        userId,
+        lockedAt: now,
+      };
+    });
+
+    await updateDoc(ref, { seatLocks });
+
     router.push({
       pathname: "/payment",
       params: {
@@ -101,6 +196,7 @@ export default function SelectSeatScreen() {
     const isSelected = selectedSeats.includes(id);
     const isReserved = reservedSeats.includes(id);
     const isPremium = row === "C";
+    const isLocked = seatLocks[id] && seatLocks[id].userId !== currentUserId;
 
     // Xác định style dựa trên trạng thái
     let seatStyle;
@@ -123,9 +219,9 @@ export default function SelectSeatScreen() {
     return (
       <TouchableOpacity
         key={id}
-        disabled={isReserved}
+        disabled={isReserved || isLocked}
         onPress={() => toggleSeat(id)}
-        style={[seatStyle, isReserved && styles.disabledSeat]}
+        style={[seatStyle, (isReserved || isLocked) && styles.disabledSeat]}
       >
         <Text style={textStyle}>{num}</Text>
       </TouchableOpacity>

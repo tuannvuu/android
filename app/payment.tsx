@@ -5,10 +5,12 @@ import {
   collection,
   doc,
   getDoc,
+  runTransaction,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -95,7 +97,10 @@ export default function Payment({ route, navigation }: PaymentProps) {
       totalPrice: string;
     }>();
 
-  const selectedSeats: string[] = seats ? JSON.parse(seats) : [];
+  const selectedSeats: string[] = useMemo(() => {
+    return seats ? JSON.parse(seats) : [];
+  }, [seats]);
+
   const finalTotal: number = totalPrice ? Number(totalPrice) : 0;
 
   // Fetch thông tin phim, suất chiếu, rạp từ Firestore
@@ -237,6 +242,18 @@ export default function Payment({ route, navigation }: PaymentProps) {
       return;
     }
 
+    // 🔥 MOMO → THANH TOÁN NGAY
+    if (selectedPaymentMethod === "momo") {
+      Alert.alert("MoMo", "Thanh toán thành công!", [
+        {
+          text: "OK",
+          onPress: completeMomoPayment,
+        },
+      ]);
+      return;
+    }
+
+    // Các phương thức khác
     Alert.alert(
       "Xác nhận thanh toán",
       `Thanh toán ${totalAmount.toLocaleString()} VND?`,
@@ -248,6 +265,81 @@ export default function Payment({ route, navigation }: PaymentProps) {
         },
       ]
     );
+  };
+  const completeMomoPayment = async () => {
+    try {
+      setProcessingPayment(true);
+
+      // 1️⃣ Update booking → PAID
+      // 🔥 Sinh bookingId dạng BK0001
+      const bookingId = await runTransaction(db, async (transaction) => {
+        const counterRef = doc(db, "counters", "bookings");
+        const counterSnap = await transaction.get(counterRef);
+
+        let nextNumber = 1;
+
+        if (counterSnap.exists()) {
+          nextNumber = counterSnap.data().value + 1;
+          transaction.update(counterRef, { value: nextNumber });
+        } else {
+          transaction.set(counterRef, { value: 1 });
+        }
+
+        return `BK${nextNumber.toString().padStart(4, "0")}`;
+      });
+
+      // 👉 Dùng bookingId làm document ID
+      const bookingRef = doc(db, "bookings", bookingId);
+
+      await setDoc(bookingRef, {
+        bookingId,
+        movieId,
+        showtimeId,
+        cinemaId,
+        seats: selectedSeats,
+        totalPrice: totalAmount,
+        paymentMethod: "MOMO",
+        status: "PAID",
+        createdAt: serverTimestamp(),
+      });
+
+      // 2️⃣ Chuyển ghế LOCK → RESERVED
+      const showtimeRef = doc(db, "showtimes", showtimeId as string);
+      const snap = await getDoc(showtimeRef);
+
+      const data = snap.data();
+      const seatLocks = data?.seatLocks || {};
+      const reservedSeats = data?.reservedSeats || [];
+
+      selectedSeats.forEach((seat) => {
+        reservedSeats.push(seat);
+        delete seatLocks[seat];
+      });
+
+      await updateDoc(showtimeRef, {
+        reservedSeats,
+        seatLocks,
+      });
+
+      // 3️⃣ Điều hướng sang màn thành công
+      Alert.alert(
+        "Thanh toán thành công 🎉",
+        "Bạn đã thanh toán vé bằng MoMo thành công.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              router.replace("/cinema-movies");
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Lỗi", "Thanh toán MoMo thất bại");
+    } finally {
+      setProcessingPayment(false);
+    }
   };
 
   // Xử lý thanh toán và lưu vào Firestore
@@ -285,7 +377,7 @@ export default function Payment({ route, navigation }: PaymentProps) {
 
       console.log("🌐 Calling backend...");
 
-      const res = await fetch("http://192.168.120.45:8080/api/payment/create", {
+      const res = await fetch("http://10.41.124.71:8080/api/payment/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -334,6 +426,35 @@ export default function Payment({ route, navigation }: PaymentProps) {
       console.log("🔚 processPayment END");
     }
   };
+
+  const unlockSeats = useCallback(async () => {
+    try {
+      if (!showtimeId || selectedSeats.length === 0) return;
+
+      const ref = doc(db, "showtimes", showtimeId as string);
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) return;
+
+      const seatLocks = snap.data().seatLocks || {};
+
+      selectedSeats.forEach((seat) => {
+        delete seatLocks[seat];
+      });
+
+      await updateDoc(ref, { seatLocks });
+
+      console.log("🔓 Seats unlocked:", selectedSeats);
+    } catch (e) {
+      console.log("❌ Unlock seats error:", e);
+    }
+  }, [showtimeId, selectedSeats]);
+
+  useEffect(() => {
+    return () => {
+      unlockSeats();
+    };
+  }, [unlockSeats]);
 
   // Định dạng số thẻ
   const formatCardNumber = (text: string): string => {
@@ -699,7 +820,6 @@ export default function Payment({ route, navigation }: PaymentProps) {
               </Text>
             </TouchableOpacity>
           </View>
-
           {/* Nút thanh toán */}
           <View style={styles.paymentButtonContainer}>
             <TouchableOpacity

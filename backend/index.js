@@ -24,10 +24,7 @@ const config = {
 app.get("/", (req, res) => {
   res.send("🔥 Backend OK - ZaloPay + AI Ready");
 });
-
-/* ================================================= */
 /* ================== AI CHATBOT =================== */
-/* ================================================= */
 app.post("/api/ask-ai", async (req, res) => {
   try {
     const { question } = req.body;
@@ -71,10 +68,7 @@ ${question}`,
     res.status(500).json({ error: "AI service failed" });
   }
 });
-
-/* ================================================= */
 /* ================= ZALOPAY ======================= */
-/* ================================================= */
 app.post("/api/payment/create", async (req, res) => {
   const { bookingId, amount } = req.body;
 
@@ -95,7 +89,7 @@ app.post("/api/payment/create", async (req, res) => {
     item: JSON.stringify([{ bookingId }]),
     embed_data: JSON.stringify(embed_data),
     description: "Thanh toán vé xem phim",
-    callback_url: "http://192.168.120.45:8080/api/payment/callback",
+    callback_url: "http://10.41.124.71:8080/api/payment/callback",
   };
 
   const data =
@@ -121,12 +115,13 @@ app.post("/api/payment/create", async (req, res) => {
   try {
     const result = await axios.post(config.endpoint, null, {
       params: order,
+      timeout: 30000,
     });
 
-    console.log("🔥 ZALOPAY CREATE RESULT:", result.data);
+    console.log(" ZALOPAY CREATE RESULT:", result.data);
     return res.json(result.data);
   } catch (err) {
-    console.error("❌ ZALOPAY ERROR:", err.response?.data || err.message);
+    console.error(" ZALOPAY ERROR:", err.response?.data || err.message);
     return res.status(500).json({ error: "ZaloPay create failed" });
   }
 });
@@ -136,12 +131,8 @@ app.post("/api/payment/callback", (req, res) => {
   console.log("🔥 ZALOPAY CALLBACK RECEIVED");
   console.log(req.body);
 
-  // TODO: verify MAC bằng KEY2
-  // TODO: update booking status = PAID
-
   res.json({ return_code: 1, return_message: "success" });
 });
-
 /* ===== START SERVER ===== */
 app.listen(8080, "0.0.0.0", () => {
   console.log("✅ Backend running at http://0.0.0.0:8080");

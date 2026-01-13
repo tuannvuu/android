@@ -45,6 +45,10 @@ export default function RegisterScreen() {
       Alert.alert("Lỗi", "Vui lòng nhập đầy đủ thông tin");
       return;
     }
+    if (!/^\d{10}$/.test(phone)) {
+      Alert.alert("Lỗi", "Số điện thoại phải đủ 10 chữ số");
+      return;
+    }
 
     if (password !== confirmPassword) {
       Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp");
@@ -85,6 +89,15 @@ export default function RegisterScreen() {
       Alert.alert("Lỗi", "Không thể đăng ký. Vui lòng thử lại.");
     } finally {
       setLoading(false);
+    }
+  };
+  const handlePhoneChange = (text: string) => {
+    // chỉ cho nhập số
+    const onlyNumbers = text.replace(/[^0-9]/g, "");
+
+    // giới hạn 10 số
+    if (onlyNumbers.length <= 10) {
+      setPhone(onlyNumbers);
     }
   };
 
@@ -156,12 +169,12 @@ export default function RegisterScreen() {
               </View>
               <TextInput
                 style={styles.input}
+                placeholder="0xxxxxxxxx"
                 placeholderTextColor="#a78bfa"
-                placeholder="••••••••"
                 value={phone}
-                onChangeText={setPhone}
-                autoCapitalize="none"
+                onChangeText={handlePhoneChange}
                 keyboardType="phone-pad"
+                maxLength={10}
                 editable={!loading}
               />
             </View>
